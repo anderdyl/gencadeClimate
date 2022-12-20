@@ -4,7 +4,87 @@ import scipy.io as sio
 from scipy.io.matlab.mio5_params import mat_struct
 import numpy as np
 from scipy.spatial import distance_matrix
+from datetime import timedelta
 
+
+def loadWaterLevel(file):
+    from netCDF4 import Dataset
+    wldata = Dataset(file)
+    waterLevel = wldata.variables['waterLevel'][:]
+    predictedWaterLevel = wldata.variables['predictedWaterLevel'][:]
+    residualWaterLevel = wldata.variables['residualWaterLevel'][:]
+    timeWl = wldata.variables['time'][:]
+    output = dict()
+    output['waterLevel'] = waterLevel
+    output['predictedWaterLevel'] = predictedWaterLevel
+    output['residualWaterLevel'] = residualWaterLevel
+    output['time'] = timeWl
+    return output
+
+
+def loadWIS(file):
+    from netCDF4 import Dataset
+
+    waves = Dataset(file)
+    waveHs = waves.variables['waveHs'][:]
+    waveTp = waves.variables['waveTp'][:]
+    waveMeanDirection = waves.variables['waveMeanDirection'][:]
+    waveTm = waves.variables['waveTm'][:]
+    waveTm1 = waves.variables['waveTm1'][:]
+    waveTm2 = waves.variables['waveTm2'][:]
+    waveHsWindsea = waves.variables['waveHsWindsea'][:]
+    waveTmWindsea = waves.variables['waveTmWindsea'][:]
+    waveMeanDirectionWindsea = waves.variables['waveMeanDirectionWindsea'][:]
+    waveSpreadWindsea = waves.variables['waveSpreadWindsea'][:]
+    timeW = waves.variables['time'][:]
+    waveTpSwell = waves.variables['waveTpSwell'][:]
+    waveHsSwell = waves.variables['waveHsSwell'][:]
+    waveMeanDirectionSwell = waves.variables['waveMeanDirectionSwell'][:]
+    waveSpreadSwell = waves.variables['waveSpreadSwell'][:]
+
+    output = dict()
+    output['waveHs'] = waveHs
+    output['waveTp'] = waveTp
+    output['waveMeanDirection'] = waveMeanDirection
+    output['waveTm'] = waveTm
+    output['waveTm1'] = waveTm1
+    output['waveTm2'] = waveTm2
+    output['waveTpSwell'] = waveTpSwell
+    output['waveHsSwell'] = waveHsSwell
+    output['waveMeanDirectionSwell'] = waveMeanDirectionSwell
+    output['waveSpreadSwell'] = waveSpreadSwell
+    output['waveHsWindsea'] = waveHsWindsea
+    output['waveTpWindsea'] = waveTmWindsea
+    output['waveMeanDirectionWindsea'] = waveMeanDirectionWindsea
+    output['waveSpreadWindsea'] = waveSpreadWindsea
+    output['t'] = timeW
+
+    return output
+
+
+
+def datenum_to_datetime(datenum):
+    """
+    Convert Matlab datenum into Python datetime.
+    :param datenum: Date in datenum format
+    :return:        Datetime object corresponding to datenum.
+    """
+    days = datenum % 1
+    hours = days % 1 * 24
+    minutes = hours % 1 * 60
+    seconds = minutes % 1 * 60
+    return datetime.fromordinal(int(datenum)) \
+           + timedelta(days=int(days)) \
+           + timedelta(hours=int(hours)) \
+           + timedelta(minutes=int(minutes)) \
+           + timedelta(seconds=round(seconds)) \
+           - timedelta(days=366)
+
+
+def moving_average(a, n=3) :
+    ret = np.cumsum(a, dtype=float)
+    ret[n:] = ret[n:] - ret[:-n]
+    return ret[n - 1:] / n
 
 def dateDay2datetime(d_vec):
     '''
@@ -198,4 +278,9 @@ def sort_cluster_gen_corr_end(centers, dimdim):
                             go_out=False
 
     return sc.flatten('F')
+
+
+
+
+
 

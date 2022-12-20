@@ -28,7 +28,7 @@ class weatherTypes():
         # self.latBottom = kwargs.get('nFrames', 1)
         # self.latTop = kwargs.get('startFrame', 0)
 
-    def extractCFSR(self):
+    def extractCFSR(self,printToScreen=False):
         '''
         This function is utilized for opening *.raw Argus files prior to a debayering task,
         and adds the
@@ -44,6 +44,8 @@ class weatherTypes():
         month = self.startTime[1]
         year2 = self.endTime[0]
         month2 = self.endTime[1]
+        print('Starting extract at {}-{}'.format(year, month))
+
         # estelaMat = '/media/dylananderson/Elements1/ESTELA/out/NagsHead2/NagsHead2_obj.mat'
 
         filePaths = np.sort(os.listdir(self.slpPath))
@@ -98,7 +100,9 @@ class weatherTypes():
                     #                                                                                       monthExtract)
                 data = Dataset(file)
                 time = data.variables['valid_date_time']
-                print('{}-{}'.format(yearExtract, monthExtract))
+                if printToScreen == True:
+
+                    print('{}-{}'.format(yearExtract, monthExtract))
 
                 # extract times and turn them into datetimes
                 # years = np.empty((len(time),))
@@ -131,13 +135,20 @@ class weatherTypes():
                 # slp_ = slp.reshape(n*m,p)
 
                 if self.avgTime == 0:
-                    print('returning hourly values')
+                    if printToScreen == True:
+                        print('returning hourly values')
+                    elif counter == 0:
+                        print('returning hourly values')
+
                     slpAvg = slp_
                     grdAvg = grd_
                     datesAvg = dates
                 else:
                     numWindows = int(len(time) / self.avgTime)
-                    print('averaging every {} hours to {} timesteps'.format(self.avgTime, numWindows))
+                    if printToScreen == True:
+                        print('averaging every {} hours to {} timesteps'.format(self.avgTime, numWindows))
+                    elif counter == 0:
+                        print('averaging every {} hours to {} timesteps'.format(self.avgTime, numWindows))
 
                     c = 0
                     datesAvg = list()
@@ -152,7 +163,11 @@ class weatherTypes():
 
                 # are we reducing the resolution of the grid?
                 if self.resolution == 0.5:
-                    print('keeping full 0.5 degree resolution')
+                    if printToScreen == True:
+                        print('keeping full 0.5 degree resolution')
+                    elif counter == 0:
+                        print('keeping full 0.5 degree resolution')
+
                     slpDownscaled = slpAvg
                     grdDownscaled = grdAvg
                     xDownscaled = x.flatten()
@@ -178,8 +193,12 @@ class weatherTypes():
                     grdDownscaled = grdAvg[ind2deg, :]
                     xDownscaled = xFlat[ind2deg]
                     yDownscaled = yFlat[ind2deg]
-                    print('Downscaling to {} degree resolution'.format(self.resolution))
-                    print('{} points rather than {} (full)'.format(len(xDownscaled), len(xFlat)))
+                    if printToScreen == True:
+                        print('Downscaling to {} degree resolution'.format(self.resolution))
+                        print('{} points rather than {} (full)'.format(len(xDownscaled), len(xFlat)))
+                    elif counter == 0:
+                        print('Downscaling to {} degree resolution'.format(self.resolution))
+                        print('{} points rather than {} (full)'.format(len(xDownscaled), len(xFlat)))
                     reshapeIndX = np.where((np.diff(xDownscaled) > 4) | (np.diff(xDownscaled) < -4))
                     reshapeIndY = np.where((np.diff(yDownscaled) < 0))
                     x2 = xDownscaled.reshape(int(len(reshapeIndY[0]) + 1), int(reshapeIndX[0][0] + 1)).filled()
@@ -251,13 +270,15 @@ class weatherTypes():
                 # slp_ = slp.reshape(n*m,p)
 
                 if self.avgTime == 0:
-                    print('returning hourly values')
+                    if printToScreen == True:
+                        print('returning hourly values')
                     slpAvg = slp_
                     grdAvg = grd_
                     datesAvg = dates
                 else:
                     numWindows = int(len(time) / self.avgTime)
-                    print('averaging every {} hours to {} timesteps'.format(self.avgTime, numWindows))
+                    if printToScreen == True:
+                        print('averaging every {} hours to {} timesteps'.format(self.avgTime, numWindows))
                     c = 0
                     datesAvg = list()
                     slpAvg = np.empty((n * p, numWindows))
@@ -270,7 +291,8 @@ class weatherTypes():
 
                 # are we reducing the resolution of the grid?
                 if self.resolution == 0.5:
-                    print('keeping full 0.5 degree resolution')
+                    if printToScreen == True:
+                        print('keeping full 0.5 degree resolution')
                     slpDownscaled = slpAvg
                     grdDownscaled = grdAvg
                     xDownscaled = x.flatten()
@@ -296,8 +318,9 @@ class weatherTypes():
                     grdDownscaled = grdAvg[ind2deg, :]
                     xDownscaled = xFlat[ind2deg]
                     yDownscaled = yFlat[ind2deg]
-                    print('Downscaling to {} degree resolution'.format(self.resolution))
-                    print('{} points rather than {} (full)'.format(len(xDownscaled), len(xFlat)))
+                    if printToScreen == True:
+                        print('Downscaling to {} degree resolution'.format(self.resolution))
+                        print('{} points rather than {} (full)'.format(len(xDownscaled), len(xFlat)))
                     reshapeIndX = np.where((np.diff(xDownscaled) > 4) | (np.diff(xDownscaled) < -4))
                     reshapeIndY = np.where((np.diff(yDownscaled) < 0))
                     x2 = xDownscaled.reshape(int(len(reshapeIndY[0]) + 1), int(reshapeIndX[0] + 1))
@@ -372,6 +395,7 @@ class weatherTypes():
         # magGrad = np.sqrt(vgrad[0] ** 2 + vgrad[1] ** 2)
 
 
+        print('Extracted until {}-{}'.format(year2, month2))
 
         from global_land_mask import globe
         wrapLons = np.where((x2 > 180))
@@ -400,7 +424,7 @@ class weatherTypes():
 
 
 
-    def pcaOfSlps(self, plotEOFs = False):
+    def pcaOfSlps(self):
 
         from sklearn.decomposition import PCA
 

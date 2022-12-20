@@ -1,6 +1,32 @@
 
 
 
+def plotOceanConditions(struct):
+    import matplotlib.cm as cm
+    import matplotlib.pyplot as plt
+    from matplotlib import gridspec
+    from mpl_toolkits.basemap import Basemap
+    import numpy as np
+
+    plt.figure()
+
+    ax1 = plt.subplot2grid((4, 1), (0, 0), rowspan=1, colspan=1)
+    ax1.plot(struct.timeWave, struct.Hs, color=[0.65, 0.65, 0.65], linewidth=0.5)
+    ax1.set_ylabel('Hs (m)')
+
+    ax2 = plt.subplot2grid((4, 1), (1, 0), rowspan=1, colspan=1)
+    ax2.plot(struct.timeWave, struct.Tp, color=[0.65, 0.65, 0.65], linewidth=0.5)
+    ax2.set_ylabel('Tp (s)')
+
+    ax3 = plt.subplot2grid((4, 1), (2, 0), rowspan=1, colspan=1)
+    ax3.plot(struct.timeWave, struct.Dm, color=[0.65, 0.65, 0.65], linewidth=0.5)
+    ax3.set_ylabel('Dm')
+
+    ax4 = plt.subplot2grid((4, 1), (3, 0), rowspan=1, colspan=1)
+    ax4.plot(struct.timeWL, struct.waterLevel, color=[0.65, 0.65, 0.65], linewidth=0.5)
+    ax4.set_xlabel('Time')
+    ax4.set_ylabel('wl (m)')
+
 
 def plotWTs(struct):
     import matplotlib.cm as cm
