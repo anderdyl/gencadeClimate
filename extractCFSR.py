@@ -17,7 +17,7 @@ latTop = 50
 startTime = [1979,1,1]
 avgTime = 24
 resolution = 1
-endTime = [1979,12,31]
+endTime = [1979,3,31]
 slpPath = '/users/dylananderson/documents/data/prmsl/'
 
 

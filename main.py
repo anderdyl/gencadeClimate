@@ -16,9 +16,10 @@ if __name__ == '__main__':
     wisPath = '/users/dylananderson/documents/data/WIS_ST63218/'
     wlPath = '/users/dylananderson/documents/data/frfWaterLevel/'
     startTime = [1981, 1, 1]
-    endTime = [1981, 12, 1]
+    endTime = [1981, 3, 31]
     duckSLP = weatherTypes(slpPath=slpPath,startTime=startTime,endTime=endTime)
-    duckSLP.extractCFSR()
+    # duckSLP.extractCFSR()
+    duckSLP.extractERA5()
 
     plotting.plotSlpExample(struct=duckSLP)
     duckSLP.pcaOfSlps()
