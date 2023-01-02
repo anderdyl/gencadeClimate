@@ -1,8 +1,8 @@
 
 # any figures
-# *.png
 *.tiff
 *.jpeg
+*.png
 
 # any pickle data files
 *.pickle
