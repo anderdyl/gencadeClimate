@@ -6,7 +6,10 @@ The workflow identifies historical synoptic weather patterns, and the meteorolog
 Markov chains for each pattern, as well as their likelihood of occurrence conditional dependent on large scale climate indices, are then used in monte carlo simulations.
 See Anderson et al. (2019) and the references within for more details.
 
+# Sea Level Pressure Fields
+Two options for running the package: 1) direct access to ERA5 data via online connection, or 2) local download of CFSR. Specific requriement for each are outlined below.
 
+### 1) ERA5
 To use ERA5 sea level pressure fields, this package requires access to the online Thredds server hosted by Copernicus.
 
 1. Create an account with Copernicus by signing up here.
@@ -20,6 +23,9 @@ To use ERA5 sea level pressure fields, this package requires access to the onlin
 
 The above command creates the file ~/.cdsapirc with your API key, which is necessary to use the CDS API. As a sanity check, use more ~/.cdsapirc to ensure everything appears correct.
 
+### 2) CFSR
 
+https://rda.ucar.edu/datasets/ds093.1/#description
+https://rda.ucar.edu/datasets/ds094.1/#description
 
 Anderson, D., A. Rueda, L. Cagigal, J. Antolinez, F. Mendez, and P. Ruggiero. (2019) Time-varying Emulator for Short and Long-Term Analysis of Coastal Flood Hazard Potential. Journal of Geophysical Research: Oceans, 124(12), 9209-9234. https://doi.org/10.1029/2019JC015312

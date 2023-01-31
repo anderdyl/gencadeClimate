@@ -6,16 +6,15 @@ from dateutil.relativedelta import relativedelta
 from netCDF4 import Dataset
 
 
-
 class weatherTypes():
     '''
     Class containing camera data and functions'''
 
     def __init__(self, **kwargs):
 
-        self.lonLeft = kwargs.get('lonLeft', 270)
+        self.lonLeft = kwargs.get('lonLeft', 275)
         self.lonRight = kwargs.get('lonRight',350)
-        self.latBot = kwargs.get('latBot', 10)
+        self.latBot = kwargs.get('latBot', 15)
         self.latTop = kwargs.get('latTop', 50)
         self.resolution = kwargs.get('resolution',1)
         self.avgTime = kwargs.get('avgTime',24)
@@ -49,7 +48,8 @@ class weatherTypes():
 
         counter = 0
         for hh in range(len(extractTime)):
-
+            if printToScreen == True:
+                print('{}-{}'.format(extractTime[hh].year, extractTime[hh].month))
             # start the client
             cds = cdsapi.Client()
             # dataset you want to read
