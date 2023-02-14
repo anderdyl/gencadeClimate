@@ -24,8 +24,21 @@ To use ERA5 sea level pressure fields, this package requires access to the onlin
 The above command creates the file ~/.cdsapirc with your API key, which is necessary to use the CDS API. As a sanity check, use more ~/.cdsapirc to ensure everything appears correct.
 
 ### 2) CFSR
+If CFSR is preferred, then the user must download all monthly files since 1979 found at the following links:
 
 https://rda.ucar.edu/datasets/ds093.1/#description
 https://rda.ucar.edu/datasets/ds094.1/#description
+
+You will need to chose 'All available' under the data tab, at full resolution in lat/lon, and click the checkbox to convert the download from grib to netcdf inorder to work with the built-in functions in this library.
+
+
+# Waves
+Two options for running the package: 1) Wave Information Studies hindcast, or 2) direct access to ERA5 data via online connection. Specific requriement for each are outlined below.
+
+
+# Climate Variables: SST and OLR
+Large-scale climate is accounted for by spatial patterns of the nearby ocean's sea surface temperature (SST) pattern at an annual scale. Depending on the site of interest, the user will need to choose either 'pacificAWT' or 'atlanticAWT' from the climateIndices class
+
+
 
 Anderson, D., A. Rueda, L. Cagigal, J. Antolinez, F. Mendez, and P. Ruggiero. (2019) Time-varying Emulator for Short and Long-Term Analysis of Coastal Flood Hazard Potential. Journal of Geophysical Research: Oceans, 124(12), 9209-9234. https://doi.org/10.1029/2019JC015312

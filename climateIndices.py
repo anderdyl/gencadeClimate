@@ -63,20 +63,20 @@ class climateIndices():
                         date = str(ii) + str(hh)
 
                     file = "ersst.v5." + date + ".nc"
-                    print(file)
+                    #print(file)
                     if ii == self.awtStart and hh < 6:
                         print("skipping {}/{}".format(ii,hh))
                     else:
                         if ii == self.awtStart and hh == 6:
                             with xr.open_dataset(os.path.join(data_folder, file)) as ds:
                                 temp = ds
-                                SST = ds['sst']
+                                SSTvalues = ds['sst']
                                 ogTime.append(datetime.datetime(ii,hh,1))
                         elif ii == (self.awtEnd-1) and hh > 5:
                             print("skipping {}/{}".format(ii,hh))
                         else:
                             with xr.open_dataset(os.path.join(data_folder,file)) as ds:
-                                SST = xr.concat([SST,ds['sst']],dim="time")
+                                SSTvalues = xr.concat([SSTvalues,ds['sst']],dim="time")
                                 ogTime.append(datetime.datetime(ii,hh,1))
 
 
@@ -89,16 +89,16 @@ class climateIndices():
                 sstTime.append(dt)
                 dt += step
 
-            data = SST.squeeze("lev")
+            data = SSTvalues.squeeze("lev")
 
             # parse data to xr.Dataset
             xds_predictor = xr.Dataset(
                 {
-                    'SST': (('longitude','latitude','time'), data.T),
+                    'SST': (('longitude','latitude','time'), data.data.T),
                 },
                 coords = {
-                    'longitude': SST.lon.values,
-                    'latitude': SST.lat.values,
+                    'longitude': SSTvalues.lon.values,
+                    'latitude': SSTvalues.lat.values,
                     'time': ogTime,
                 }
             )
@@ -154,14 +154,14 @@ class climateIndices():
             Ys = subset.latitude.values
             [XR, YR] = np.meshgrid(Xs, Ys)
 
-            if plotOutput:
-                plt.figure()
-                p1 = plt.subplot2grid((1, 1), (0, 0))
-                spatialField = tempdata_runavg[:,:,-1]#np.reshape(var_anom_mean.values,(33,36))
-                m = Basemap(projection='merc', llcrnrlat=-40, urcrnrlat=55, llcrnrlon=255, urcrnrlon=375, lat_ts=10, resolution='c')
-                m.drawcoastlines()
-                cx, cy = m(XR, YR)
-                CS = m.contour(cx, cy, spatialField.T),# np.arange(0,0.023,.003), cmap=cm.RdBu_r, shading='gouraud')
+            # if plotOutput:
+            #     plt.figure()
+            #     p1 = plt.subplot2grid((1, 1), (0, 0))
+            #     spatialField = tempdata_runavg[:,:,-1]#np.reshape(var_anom_mean.values,(33,36))
+            #     m = Basemap(projection='merc', llcrnrlat=-40, urcrnrlat=55, llcrnrlon=255, urcrnrlon=375, lat_ts=10, resolution='c')
+            #     m.drawcoastlines()
+            #     cx, cy = m(XR, YR)
+            #     CS = m.contour(cx, cy, spatialField.T),# np.arange(0,0.023,.003), cmap=cm.RdBu_r, shading='gouraud')
 
 
             nlon,nlat,ntime = np.shape(tempdata_runavg)
@@ -217,7 +217,15 @@ class climateIndices():
             # awt_bmus2 = awt_bmus
             awt_bmus2 = np.nan * np.ones((np.shape(awt_bmus_og)))
 
-            order = [0, 4, 5, 3, 2, 1]
+            avgSST = []
+            for hh in np.unique(awt_bmus_og):
+                indexAWT = np.where(awt_bmus_og == hh)
+                avgSST.append(np.nanmean(annual[:, indexAWT[0]]))
+                #print(np.nanmean(annual[:, indexAWT[0]]))
+
+            order = np.argsort(np.asarray(avgSST))#[0, 4, 5, 3, 2, 1]
+
+            print(order)
 
             for hh in np.arange(0, 6):
                 indexOR = np.where(awt_bmus_og == order[hh])
@@ -251,7 +259,7 @@ class climateIndices():
 
             d1 = datetime.datetime(1979, 6, 1)
             dt = datetime.datetime(1979, 6, 1)
-            end = datetime.datetime(2021, 6, 2)
+            end = datetime.datetime(2022, 6, 2)
             step = relativedelta(days=1)
             dailyTime = []
             while dt < end:
@@ -300,20 +308,20 @@ class climateIndices():
                         chain[(key1, key2)].append(word)
 
             print('Chain size: {0} distinct bmu pairs.'.format(len(chain)))
-
-            chain3 = {}
-            n_words = len(awt_bmus)
-            for i, key1 in enumerate(awt_bmus):
-                if n_words > i + 3:
-                    key2 = awt_bmus[i + 1]
-                    key3 = awt_bmus[i + 2]
-                    word = awt_bmus[i + 3]
-                    if (key1, key2, key3) not in chain3:
-                        chain3[(key1, key2, key3)] = [word]
-                    else:
-                        chain3[(key1, key2, key3)].append(word)
-            print('Chain size: {0} distinct bmu pairs.'.format(len(chain3)))
-
+            #
+            # chain3 = {}
+            # n_words = len(awt_bmus)
+            # for i, key1 in enumerate(awt_bmus):
+            #     if n_words > i + 3:
+            #         key2 = awt_bmus[i + 1]
+            #         key3 = awt_bmus[i + 2]
+            #         word = awt_bmus[i + 3]
+            #         if (key1, key2, key3) not in chain3:
+            #             chain3[(key1, key2, key3)] = [word]
+            #         else:
+            #             chain3[(key1, key2, key3)].append(word)
+            # print('Chain size: {0} distinct bmu pairs.'.format(len(chain3)))
+            print(chain)
             sim_num = 100
             sim_years = 500
             evbmus_sim = np.nan * np.ones((sim_num, (sim_years)))
@@ -489,6 +497,13 @@ class climateIndices():
                 dates_sim.append(dt)  # .strftime('%Y-%m-%d'))
                 dt += step
 
+
+            self.pc1Sims = pc1Sims
+            self.pc2Sims = pc2Sims
+            self.pc3Sims = pc3Sims
+            self.evbmus_sim = evbmus_sim
+            self.dates_sim = dates_sim
+
             # samplesPickle = 'awtSimulations.pickle'
             # outputSamples = {}
             # outputSamples['pc1Sims'] = pc1Sims
@@ -541,3 +556,14 @@ class climateIndices():
             #
             # with open(mwtPickle,'wb') as f:
             #     pickle.dump(outputMWTs, f)
+
+
+    def mjo(self,loadPrevious=False,plotOutput=False):
+
+
+        if loadPrevious == True:
+
+            print('need to know what variables to load in this space')
+
+        else:
+            data_folder="/users/dylananderson/Documents/data/ERSSTv5/"
