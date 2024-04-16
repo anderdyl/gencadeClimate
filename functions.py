@@ -544,3 +544,185 @@ def copulaSimulation(U_data, kernels, num_sim):
 
 
 
+
+def xds2datetime(d64):
+    from datetime import datetime
+    'converts xr.Dataset np.datetime64[ns] into datetime'
+    # TODO: hour minutes and seconds
+
+    return datetime(int(d64.dt.year), int(d64.dt.month), int(d64.dt.day))
+
+
+def xds_reindex_daily(xds_data,  dt_lim1=None, dt_lim2=None):
+    from datetime import datetime
+    '''
+    Reindex xarray.Dataset to daily data between optional limits
+    '''
+
+    # TODO: remove limits from inside function
+
+    # TODO: remove this swich and use date2datenum
+    if isinstance(xds_data.time.values[0], datetime):
+        xds_dt1 = xds_data.time.values[0]
+        xds_dt2 = xds_data.time.values[-1]
+    else:
+        # parse xds times to python datetime
+        xds_dt1 = xds2datetime(xds_data.time[0])
+        xds_dt2 = xds2datetime(xds_data.time[-1])
+
+    # cut data at limits
+    if dt_lim1:
+        xds_dt1 = max(xds_dt1, dt_lim1)
+    if dt_lim2:
+        xds_dt2 = min(xds_dt2, dt_lim2)
+
+    # number of days
+    num_days = (xds_dt2-xds_dt1).days+1
+
+    # reindex xarray.Dataset
+    return xds_data.reindex(
+        {'time': [xds_dt1 + timedelta(days=i) for i in range(num_days)]},
+        method = 'pad',
+    )
+
+
+
+
+def xds_common_dates_daily(xds_list):
+    from datetime import timedelta
+    '''
+    returns daily datetime array between a list of xarray.Dataset comon date
+    limits
+    '''
+    d1, d2 = xds_limit_dates(xds_list)
+    return [d1 + timedelta(days=i) for i in range((d2-d1).days+1)]
+
+
+def xds_limit_dates(xds_list):
+    '''
+    returns datetime common limits between a list of xarray.Dataset
+    '''
+    from datetime import datetime
+    d1 = None
+    d2 = None
+
+    for xds_e in xds_list:
+
+        # TODO: remove this swich and use date2datenum
+        if isinstance(xds_e.time.values[0], datetime):
+            xds_e_dt1 = xds_e.time.values[0]
+            xds_e_dt2 = xds_e.time.values[-1]
+        else:
+            # parse xds times to python datetime
+            xds_e_dt1 = xds2datetime(xds_e.time[0])
+            xds_e_dt2 = xds2datetime(xds_e.time[-1])
+
+        if d1 == None:
+            d1 = xds_e_dt1
+            d2 = xds_e_dt2
+
+        d1 = max(xds_e_dt1, d1)
+        d2 = min(xds_e_dt2, d2)
+
+    return d1, d2
+
+
+
+def npdt64todatetime(dt64):
+    from datetime import datetime
+    from datetime import timedelta
+    'converts np.datetime64[ns] into datetime'
+
+    ts = (dt64 - np.datetime64('1970-01-01T00:00:00Z')) / np.timedelta64(1, 's')
+    return datetime(1970, 1, 1) + timedelta(seconds=ts)
+
+
+
+
+
+# TODO REFACTOR CON teslakit/database.py
+
+def StoreBugXdset(xds_data, p_ncfile):
+    # common
+    from datetime import datetime, date
+    import os
+    import os.path as op
+
+    # pip
+    import netCDF4
+    import numpy as np
+
+    # tk
+    from functions import npdt64todatetime as n2d
+
+    '''
+    Stores xarray.Dataset to .nc file while avoiding bug with time data (>2262)
+    '''
+
+    # get metadata from xarray.Dataset
+    dim_names = xds_data.dims.keys()
+    var_names = xds_data.variables.keys()
+
+    # Handle time data  (calendar format)
+    calendar = 'standard'
+    units = 'hours since 1970-01-01 00:00:00'
+
+    # remove previous file
+    if op.isfile(p_ncfile):
+        os.remove(p_ncfile)
+
+    # Use netCDF4 lib
+    root = netCDF4.Dataset(p_ncfile, 'w', format='NETCDF4')
+
+    # Handle dimensions
+    for dn in dim_names:
+        vals = xds_data[dn].values[:]
+        root.createDimension(dn, len(vals))
+
+    # handle variables
+    for vn in var_names:
+        vals = xds_data[vn].values[:]
+
+        # dimensions values
+        if vn in dim_names:
+
+            if vn == 'time':  # time dimension values
+                # TODO: profile / acelerar
+                if isinstance(vals[0], datetime):
+                    pass
+
+                elif isinstance(vals[0], date):
+                    # TODO se pierde la resolucion horaria
+                    # parse datetime.date to datetime.datetime
+                    vals = [datetime.combine(d, datetime.min.time()) for d in vals]
+
+                elif isinstance(vals[0], np.datetime64):
+                    # parse numpy.datetime64 to datetime.datetime
+                    vals = [n2d(d) for d in vals]
+
+                dv = root.createVariable(varname=vn, dimensions=(vn,), datatype='int64')
+                dv[:] = netCDF4.date2num(vals, units=units, calendar=calendar)
+                dv.units = units
+                dv.calendar = calendar
+
+            else:
+                dv = root.createVariable(varname=vn, dimensions=(vn,), datatype=type(vals[0]))
+                dv[:] = vals
+
+        # variables values
+        else:
+            vdims = xds_data[vn].dims
+            vatts = xds_data[vn].attrs
+
+            vv = root.createVariable(varname=vn,dimensions=vdims, datatype='float32')
+            vv[:] = vals
+
+            # variable attributes
+            vv.setncatts(vatts)
+
+    # global attributes
+    root.setncatts(xds_data.attrs)
+
+    # close file
+    root.close()
+

@@ -1,9 +1,11 @@
 import datetime
 from dateutil.relativedelta import relativedelta
 import numpy as np
+from global_land_mask import globe
+import cdsapi
+import xarray as xr
+from urllib.request import urlopen
 
-
-slpMemory = False
 lonLeft = 250
 lonRight = 350
 latBot = 10
@@ -12,7 +14,6 @@ startTime = [1979,1,1]
 avgTime = 24
 resolution = 1
 endTime = [1979,3,31]
-slpPath = '/users/dylananderson/documents/data/prmsl/'
 
 
 dt = datetime.date(startTime[0], startTime[1], startTime[2])
@@ -24,9 +25,7 @@ while dt < end:
     dt += step
 
 
-import cdsapi
-import xarray as xr
-from urllib.request import urlopen
+
 
 counter = 0
 for hh in range(len(extractTime)):
@@ -143,6 +142,19 @@ for hh in range(len(extractTime)):
         x2 = xDownscaled.reshape(int(len(reshapeIndY[0]) + 1), int(reshapeIndX[0][0] + 1))
         y2 = yDownscaled.reshape(int(len(reshapeIndY[0]) + 1), int(reshapeIndX[0][0] + 1))
 
+
+
+    wrapLons = np.where((x2 > 180))
+    x2[wrapLons] = x2[wrapLons] - 360
+    xFlat = x2.flatten()
+    yFlat = y2.flatten()
+
+    isOnLandGrid = globe.is_land(y2, x2)
+    isOnLandFlat = globe.is_land(yFlat, xFlat)
+
+    x2[wrapLons] = x2[wrapLons] + 360
+    xFlat = x2.flatten()
+
     My, Mx = np.shape(y2)
     slpMem = slpDownscaled
     datesMem = datesAvg
@@ -156,6 +168,7 @@ for hh in range(len(extractTime)):
         GRDS = np.hstack((GRDS, grdMem))
         DATES = np.append(DATES, datesMem)
     counter = counter + 1
+
 
 
 

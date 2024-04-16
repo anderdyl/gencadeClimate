@@ -674,5 +674,33 @@ class weatherTypes():
 
 
 
+    #
+    # def separateDistributions(self):
+    #     import itertools
+    #     import operator
+    #     from datetime import timedelta
+    #
+    #     dt = datetime(1979, 2, 1)
+    #     end = datetime(2022, 6, 1)
+    #     step = timedelta(days=1)
+    #     midnightTime = []
+    #     while dt < end:
+    #         midnightTime.append(dt)  # .strftime('%Y-%m-%d'))
+    #         dt += step
+    #
+    #     bmus = newBmus[0:len(midnightTime)]
+    #
+    #     grouped = [[e[0] for e in d[1]] for d in itertools.groupby(enumerate(bmus), key=operator.itemgetter(1))]
+    #
+    #     groupLength = np.asarray([len(i) for i in grouped])
+    #     bmuGroup = np.asarray([bmus[i[0]] for i in grouped])
+    #     timeGroup = [np.asarray(midnightTime)[i] for i in grouped]
+    #
+    #
+
+
+
+
+
 
 

@@ -36,10 +36,10 @@ class climateIndices():
         self.endTime = kwargs.get('endTime',[2020,12,31])
         self.slpMemory = kwargs.get('slpMemory',False)
         self.slpPath = kwargs.get('slpPath')
-        # self.lonLeft = kwargs.get('cameraID', 'c1')
-        # self.lonRight = kwargs.get('rawPath')
-        # self.latBottom = kwargs.get('nFrames', 1)
-        # self.latTop = kwargs.get('startFrame', 0)
+        self.lonLeft = kwargs.get('lonLeft', 280)
+        self.lonRight = kwargs.get('lonRight',350)
+        self.latBottom = kwargs.get('latBottom', 0)
+        self.latTop = kwargs.get('latTop', 65)
 
     def atlanticAWT(self,loadPrevious=False,plotOutput=False):
 
@@ -109,7 +109,7 @@ class climateIndices():
             y2 = self.awtEnd-1
             m1 = 6
             m2 = 5
-            subset = xds_predictor.sel(longitude=slice(280,350),latitude=slice(0,65))
+            subset = xds_predictor.sel(longitude=slice(self.lonLeft,self.lonRight),latitude=slice(self.latBottom,self.latTop))
 
 
             d1 = datetime.datetime(self.awtStart, 6, 1)
@@ -241,11 +241,13 @@ class climateIndices():
                     indexAWT = np.where(awt_bmus2 == hh)
                     # rectField = np.nanmean(subset['SST'][:, :, indexAWT[0]], axis=2)
                     # rectField = np.nanmean(tempdata_runavg[:, :, indexAWT[0]], axis=2)
-                    rectField = np.reshape(np.nanmean(annual[:, indexAWT[0]], axis=1), (36, 33))
                     ax = plt.subplot(gs2[int(hh)])
                     Xs = subset.longitude.values
                     Ys = subset.latitude.values
                     [XR, YR] = np.meshgrid(Xs, Ys)
+                    # rectField = np.reshape(np.nanmean(annual[:, indexAWT[0]], axis=1), (int((self.lonRight-self.lonRight)/2+1), ))
+                    rectField = np.reshape(np.nanmean(annual[:, indexAWT[0]], axis=1), (len(Xs),len(Ys)))
+
                     m = Basemap(projection='merc', llcrnrlat=0, urcrnrlat=55, llcrnrlon=255, urcrnrlon=375, lat_ts=10,
                                 resolution='c')
                     m.drawcoastlines()
@@ -259,7 +261,7 @@ class climateIndices():
 
             d1 = datetime.datetime(1979, 6, 1)
             dt = datetime.datetime(1979, 6, 1)
-            end = datetime.datetime(2022, 6, 2)
+            end = datetime.datetime(self.awtEnd-1, 6, 2)
             step = relativedelta(days=1)
             dailyTime = []
             while dt < end:
@@ -293,6 +295,10 @@ class climateIndices():
                     len(dailyAWT[sSeason[0][0]:ssSeason[0][0] + 1]), )
                 dailyPC3[sSeason[0][0]:ssSeason[0][0] + 1] = subsetPCs[i, 2] * np.ones(
                     len(dailyAWT[sSeason[0][0]:ssSeason[0][0] + 1]), )
+
+            self.dailyPC1 = dailyPC1[0:-1]
+            self.dailyPC2 = dailyPC2[0:-1]
+            self.dailyPC3 = dailyPC3[0:-1]
 
             # make a markov chain of the AWT clusters
 
@@ -501,8 +507,8 @@ class climateIndices():
             self.pc1Sims = pc1Sims
             self.pc2Sims = pc2Sims
             self.pc3Sims = pc3Sims
-            self.evbmus_sim = evbmus_sim
-            self.dates_sim = dates_sim
+            self.awtBmusSim = evbmus_sim
+            self.awtDatesSim = dates_sim
 
             # samplesPickle = 'awtSimulations.pickle'
             # outputSamples = {}
@@ -558,7 +564,7 @@ class climateIndices():
             #     pickle.dump(outputMWTs, f)
 
 
-    def mjo(self,loadPrevious=False,plotOutput=False):
+    def mjo(self,historicalSimNum,futureSimNum,loadPrevious=False,plotOutput=False):
 
 
         if loadPrevious == True:
@@ -566,4 +572,642 @@ class climateIndices():
             print('need to know what variables to load in this space')
 
         else:
-            data_folder="/users/dylananderson/Documents/data/ERSSTv5/"
+            import datetime
+            from dateutil.relativedelta import relativedelta
+            import numpy as np
+            import pandas as pd
+            import csv
+            import matplotlib.pyplot as plt
+            from matplotlib import gridspec
+            import matplotlib.colors as mcolors
+            import matplotlib.patches as patches
+            from alr import ALR_WRP
+            from functions import xds_common_dates_daily as xcd_daily
+            from functions import xds_reindex_daily as xr_daily
+
+            _faspect = 1.618
+            _fsize = 9.8
+            _fdpi = 128
+
+            year = []
+            month = []
+            day = []
+            RMM1 = []
+            RMM2 = []
+            phase = []
+            amplitude = []
+            # Missing Value= 1.E36 or 999
+            with open('mjo.txt', newline='') as csvfile:
+                csvreader = csv.reader(csvfile, delimiter='\t')  # , quotechar='|')
+                # line1 = txtfile.readline()
+                # line2 = txtfile.readline()
+                # data = txtfile.readlines()
+                next(csvreader)
+                next(csvreader)
+                for row in csvreader:
+                    print('{}'.format(row[0]))
+                    temp = row[0].split()
+                    year.append(int(temp[0]))
+                    month.append(int(temp[1]))
+                    day.append(int(temp[2]))
+                    RMM1.append(float(temp[3]))
+                    RMM2.append(float(temp[4]))
+                    phase.append(int(temp[5]))
+                    amplitude.append(float(temp[6]))
+
+            mjoPhase = np.asarray(phase)
+            mjoRmm1 = np.asarray(RMM1)
+            mjoRmm2 = np.asarray(RMM2)
+            dt = datetime.date(year[0], month[0], day[0])
+            end = datetime.date(year[-1], month[-1], day[-1])
+            step = relativedelta(days=1)
+            mjoTime = []
+            while dt < end:
+                mjoTime.append(dt)  # .strftime('%Y-%m-%d'))
+                dt += step
+
+
+            index = np.where((np.asarray(mjoTime) >= datetime.date(1979,6,1)) & (np.asarray(mjoTime) < datetime.date(self.awtEnd-1,6,1)))
+
+            mjoRmm1 = mjoRmm1[index]
+            mjoRmm2 = mjoRmm2[index]
+            mjoPhase = mjoPhase[index]
+
+            def MJO_Categories(rmm1, rmm2, phase):
+                '''
+                Divides MJO data in 25 categories.
+
+                rmm1, rmm2, phase - MJO parameters
+
+                returns array with categories time series
+                and corresponding rmm
+                '''
+
+                rmm = np.sqrt(rmm1 ** 2 + rmm2 ** 2)
+                categ = np.empty(rmm.shape) * np.nan
+
+                for i in range(1, 9):
+                    s = np.squeeze(np.where(phase == i))
+                    rmm_p = rmm[s]
+
+                    # categories
+                    categ_p = np.empty(rmm_p.shape) * np.nan
+                    categ_p[rmm_p <= 1] = 25
+                    categ_p[rmm_p > 1] = i + 8 * 2
+                    categ_p[rmm_p > 1.5] = i + 8
+                    categ_p[rmm_p > 2.5] = i
+                    categ[s] = categ_p
+
+                # get rmm_categ
+                rmm_categ = {}
+                for i in range(1, 26):
+                    s = np.squeeze(np.where(categ == i))
+                    rmm_categ['cat_{0}'.format(i)] = np.column_stack((rmm1[s], rmm2[s]))
+
+                return categ.astype(int), rmm_categ
+
+            def Plot_MJO_phases(rmm1, rmm2, phase, show=True):
+                'Plot MJO data separated by phase'
+
+                # parameters for custom plot
+                size_points = 0.2
+                size_lines = 0.8
+                l_colors_phase = np.array(
+                    [
+                        [1, 0, 0],
+                        [0.6602, 0.6602, 0.6602],
+                        [1.0, 0.4961, 0.3125],
+                        [0, 1, 0],
+                        [0.2539, 0.4102, 0.8789],
+                        [0, 1, 1],
+                        [1, 0.8398, 0],
+                        [0.2930, 0, 0.5078]
+                    ]
+                )
+
+                color_lines_1 = (0.4102, 0.4102, 0.4102)
+
+                # plot figure
+                fig, ax = plt.subplots(1, 1, figsize=(_fsize, _fsize))
+                ax.scatter(rmm1, rmm2, c='b', s=size_points)
+
+                # plot data by phases
+                for i in range(1, 9):
+                    ax.scatter(
+                        rmm1.where(phase == i),
+                        rmm2.where(phase == i),
+                        c=np.array([l_colors_phase[i - 1]]),
+                        s=size_points)
+
+                # plot sectors
+                ax.plot([-4, 4], [-4, 4], color='k', linewidth=size_lines)
+                ax.plot([-4, 4], [4, -4], color='k', linewidth=size_lines)
+                ax.plot([-4, 4], [0, 0], color='k', linewidth=size_lines)
+                ax.plot([0, 0], [-4, 4], color='k', linewidth=size_lines)
+
+                # axis
+                plt.xlim(-4, 4)
+                plt.ylim(-4, 4)
+                plt.xlabel('RMM1')
+                plt.ylabel('RMM2')
+                ax.set_aspect('equal')
+
+                # show and return figure
+                if show: plt.show()
+                return fig
+
+            # xds = xr.open_dataset(self.paths.site.MJO.hist)
+
+            mjoBmus, mjoGroups = MJO_Categories(mjoRmm1, mjoRmm2, mjoPhase)
+
+            rm1 = pd.DataFrame(mjoRmm1)
+            rm2 = pd.DataFrame(mjoRmm2)
+            ph = pd.DataFrame(mjoPhase)
+            bmus = pd.DataFrame(mjoBmus)
+            if plotOutput:
+                axMJO = Plot_MJO_phases(rm1, rm2, ph)
+
+            def colors_mjo():
+                'custom colors for MJO 25 categories'
+
+                l_named_colors = [
+                    'lightskyblue', 'deepskyblue', 'royalblue', 'mediumblue',
+                    'darkblue', 'darkblue', 'darkturquoise', 'turquoise',
+                    'maroon', 'saddlebrown', 'chocolate', 'gold', 'orange',
+                    'orangered', 'red', 'firebrick', 'Purple', 'darkorchid',
+                    'mediumorchid', 'magenta', 'mediumslateblue', 'blueviolet',
+                    'darkslateblue', 'indigo', 'darkgray',
+                ]
+
+                # get rgb colors as numpy array
+                np_colors_rgb = np.array(
+                    [mcolors.to_rgb(c) for c in l_named_colors]
+                )
+
+                return np_colors_rgb
+
+            np_colors_rgb_categ = colors_mjo()
+
+            def Plot_MJO_Categories(rmm1, rmm2, categ, show=True):
+                'Plot MJO data separated by 25 categories'
+
+                # parameters for custom plot
+                size_lines = 0.8
+                color_lines_1 = (0.4102, 0.4102, 0.4102)
+
+                #  custom colors for mjo 25 categories
+                np_colors_rgb_categ = colors_mjo()
+
+                # plot figure
+                fig, ax = plt.subplots(1, 1, figsize=(_fsize, _fsize))
+
+                # plot sectors
+                ax.plot([-4, 4], [-4, 4], color='k', linewidth=size_lines, zorder=9)
+                ax.plot([-4, 4], [4, -4], color='k', linewidth=size_lines, zorder=9)
+                ax.plot([-4, 4], [0, 0], color='k', linewidth=size_lines, zorder=9)
+                ax.plot([0, 0], [-4, 4], color='k', linewidth=size_lines, zorder=9)
+
+                # plot circles
+                R = [1, 1.5, 2.5]
+
+                for rr in R:
+                    ax.add_patch(
+                        patches.Circle(
+                            (0, 0),
+                            rr,
+                            color='k',
+                            linewidth=size_lines,
+                            fill=False,
+                            zorder=9)
+                    )
+                ax.add_patch(
+                    patches.Circle((0, 0), R[0], fc='w', fill=True, zorder=10))
+
+                # plot data by categories
+                for i in range(1, 25):
+                    if i > 8:
+                        size_points = 0.2
+                    else:
+                        size_points = 1.7
+
+                    ax.scatter(
+                        rmm1.where(categ == i),
+                        rmm2.where(categ == i),
+                        c=[np_colors_rgb_categ[i - 1]],
+                        s=size_points
+                    )
+
+                #  last category on top (zorder)
+                ax.scatter(
+                    rmm1.where(categ == 25),
+                    rmm2.where(categ == 25),
+                    c=[np_colors_rgb_categ[-1]],
+                    s=0.2,
+                    zorder=12
+                )
+
+                # TODO: category number
+                rr = 0.3
+                ru = 0.2
+                l_pn = [
+                    (-3, -1.5, '1'),
+                    (-1.5, -3, '2'),
+                    (1.5 - rr, -3, '3'),
+                    (3 - rr, -1.5, '4'),
+                    (3 - rr, 1.5 - ru, '5'),
+                    (1.5 - rr, 3 - ru, '6'),
+                    (-1.5, 3 - ru, '7'),
+                    (-3, 1.5 - ru, '8'),
+                    (-2, -1, '9'),
+                    (-1, -2, '10'),
+                    (1 - rr, -2, '11'),
+                    (2 - rr, -1, '12'),
+                    (2 - rr, 1 - ru, '13'),
+                    (1 - rr, 2 - ru, '14'),
+                    (-1, 2 - ru, '15'),
+                    (-2, 1 - ru, '16'),
+                    (-1.3, -0.6, '17'),
+                    (-0.6, -1.3, '18'),
+                    (0.6 - rr, -1.3, '19'),
+                    (1.3 - rr, -0.6, '20'),
+                    (1.3 - rr, 0.6 - ru, '21'),
+                    (0.6 - rr, 1.3 - ru, '22'),
+                    (-0.6, 1.3 - ru, '23'),
+                    (-1.3, 0.6 - ru, '24'),
+                    (0 - rr / 2, 0 - ru / 2, '25'),
+                ]
+                for xt, yt, tt in l_pn:
+                    ax.text(xt, yt, tt, fontsize=15, fontweight='bold', zorder=11)
+
+                # axis
+                plt.xlim(-4, 4)
+                plt.ylim(-4, 4)
+                plt.xlabel('RMM1')
+                plt.ylabel('RMM2')
+                ax.set_aspect('equal')
+
+                # show and return figure
+                if show: plt.show()
+                return fig
+
+            if plotOutput:
+                axMJO2 = Plot_MJO_Categories(rm1, rm2, bmus)
+
+            def ClusterProbabilities(series, set_values):
+                'return series probabilities for each item at set_values'
+
+                us, cs = np.unique(series, return_counts=True)
+                d_count = dict(zip(us, cs))
+
+                # cluster probabilities
+                cprobs = np.zeros((len(set_values)))
+                for i, c in enumerate(set_values):
+                    cprobs[i] = 1.0 * d_count[c] / len(series) if c in d_count.keys() else 0.0
+
+                return cprobs
+
+            def axplot_WT_Probs(ax, wt_probs,
+                                ttl='', vmin=0, vmax=0.1,
+                                cmap='Blues', caxis='black'):
+                'axes plot WT cluster probabilities'
+
+                # clsuter transition plot
+                pc = ax.pcolor(
+                    np.flipud(wt_probs),
+                    cmap=cmap, vmin=vmin, vmax=vmax,
+                    edgecolors='k',
+                )
+
+                # customize axes
+                ax.set_xticks([])
+                ax.set_yticks([])
+                ax.set_title(ttl, {'fontsize': 10, 'fontweight': 'bold'})
+
+                # axis color
+                plt.setp(ax.spines.values(), color=caxis)
+                plt.setp(
+                    [ax.get_xticklines(), ax.get_yticklines()],
+                    color=caxis,
+                )
+
+                # axis linewidth
+                if caxis != 'black':
+                    plt.setp(ax.spines.values(), linewidth=3)
+
+                return pc
+
+            mjoTime = np.asarray(mjoTime)[index]
+            mjoYear = np.asarray(year)[index]
+            mjoDay = np.asarray(day)[index]
+            mjoMonth = np.asarray(month)[index]
+            self.mjoBmus = mjoBmus
+            self.mjoGroups = mjoGroups
+            self.mjoPhase = mjoPhase
+            self.mjoRmm1 = mjoRmm1
+            self.mjoRmm2 = mjoRmm2
+            self.mjoTime = mjoTime
+            self.index = index
+            self.mjoYear = mjoYear
+            self.mjoDay = mjoDay
+            self.mjoMonth = mjoMonth
+
+            self.copulaData = list()
+            for i in range(len(np.unique(mjoBmus))):
+
+                tempInd = np.where(((mjoBmus) == i+1))
+                dataCop = []
+                for kk in range(len(tempInd[0])):
+                    dataCop.append(list([mjoRmm1[tempInd[0][kk]], mjoRmm2[tempInd[0][kk]]]))
+                self.copulaData.append(dataCop)
+
+            self.gevCopulaSims = list()
+            for i in range(len(np.unique(mjoBmus))):
+                tempCopula = np.asarray(self.copulaData[i])
+                kernels = ['KDE', 'KDE']
+                samples = copulaSimulation(tempCopula, kernels, 100000)
+                print('generating samples for MJO {}'.format(i))
+                self.gevCopulaSims.append(samples)
+            # xds_MJO_fit = xr.Dataset(
+            #     {
+            #         'rmm1': (('time',), mjoRmm1),
+            #         'rmm2': (('time',), mjoRmm2),
+            #     },
+            #     coords={'time': [datetime.datetime(mjoYear[r], mjoMonth[r], mjoDay[r]) for r in range(len(mjoDay))]}
+            # )
+            # # reindex to daily data after 1979-01-01 (avoid NaN)
+            # xds_MJO_fit = xr_daily(xds_MJO_fit, datetime.datetime(1979, 6, 1))
+
+            from datetime import datetime, timedelta
+            self.xds_KMA_fit = xr.Dataset(
+                {
+                    'bmus': (('time',), mjoBmus),
+                },
+                coords={'time': [datetime(mjoYear[r], mjoMonth[r], mjoDay[r]) for r in range(len(mjoDay))]}
+            )
+
+            # AWT: PCs (Generated with copula simulation. Annual data, parse to daily)
+            self.xds_PCs_fit = xr.Dataset(
+                {
+                    'PC1': (('time',), self.dailyPC1),
+                    'PC2': (('time',), self.dailyPC3),
+                    'PC3': (('time',), self.dailyPC3),
+                },
+                coords={'time': [datetime(mjoYear[r], mjoMonth[r], mjoDay[r]) for r in range(len(mjoDay))]}
+            )
+            # reindex annual data to daily data
+            # xds_PCs_fit = xr_daily(xds_PCs_fit)
+
+            # --------------------------------------
+            # Mount covariates matrix
+
+            # available data:
+            # model fit: xds_KMA_fit, xds_MJO_fit, xds_PCs_fit
+            # model sim: xds_MJO_sim, xds_PCs_sim
+
+            # covariates: FIT
+            # d_covars_fit = xcd_daily([xds_MJO_fit, xds_PCs_fit, xds_KMA_fit])
+            d_covars_fit = xcd_daily([self.xds_PCs_fit, self.xds_KMA_fit])
+
+            # PCs covar
+            cov_PCs = self.xds_PCs_fit.sel(time=slice(d_covars_fit[0], d_covars_fit[-1]))
+            cov_1 = cov_PCs.PC1.values.reshape(-1, 1)
+            cov_2 = cov_PCs.PC2.values.reshape(-1, 1)
+            cov_3 = cov_PCs.PC3.values.reshape(-1, 1)
+
+            # MJO covars
+            # cov_MJO = xds_MJO_fit.sel(time=slice(d_covars_fit[0], d_covars_fit[-1]))
+            # cov_4 = cov_MJO.rmm1.values.reshape(-1, 1)
+            # cov_5 = cov_MJO.rmm2.values.reshape(-1, 1)
+
+            # join covars and norm.
+            cov_T = np.hstack((cov_1, cov_2, cov_3))
+
+            # generate xarray.Dataset
+            cov_names = ['PC1', 'PC2', 'PC3']
+            self.xds_cov_fit = xr.Dataset(
+                {
+                    'cov_values': (('time', 'cov_names'), cov_T),
+                },
+                coords={
+                    'time': d_covars_fit,
+                    'cov_names': cov_names,
+                }
+            )
+
+            # use bmus inside covariate time frame
+            self.xds_bmus_fit = self.xds_KMA_fit.sel(
+                time=slice(d_covars_fit[0], d_covars_fit[-1])
+            )
+
+            bmus = self.xds_bmus_fit.bmus
+
+            # Autoregressive logistic wrapper
+            num_clusters = 25
+            sim_num = 100
+            fit_and_save = True  # False for loading
+            p_test_ALR = '/Users/dylananderson/Documents/duneLifeCycles/'
+
+            # ALR terms
+            self.d_terms_settings = {
+                'mk_order': 2,
+                'constant': True,
+                'long_term': False,
+                'seasonality': (False,),  # [2, 4, 6]),
+                'covariates': (True, self.xds_cov_fit),
+            }
+            # Autoregressive logistic wrapper
+            ALRW = ALR_WRP(p_test_ALR)
+            ALRW.SetFitData(
+                num_clusters, self.xds_bmus_fit, self.d_terms_settings)
+
+            ALRW.FitModel(max_iter=20000)
+
+            # p_report = op.join(p_data, 'r_{0}'.format(name_test))
+
+            ALRW.Report_Fit()  # '/media/dylananderson/Elements/NC_climate/testALR/r_Test', terms_fit==False)
+
+            if historicalSimNum > 0:
+                # Historical Simulation
+                # start simulation at PCs available data
+                d1 = datetime(1979, 6, 1)  # x2d(xds_cov_fit.time[0])
+                d2 = datetime(2023, 6, 1)  # datetime(d1.year+sim_years, d1.month, d1.day)
+                dates_sim = [d1 + timedelta(days=i) for i in range((d2 - d1).days + 1)]
+                # print some info
+                # print('ALR model fit   : {0} --- {1}'.format(
+                #    d_covars_fit[0], d_covars_fit[-1]))
+                print('ALR model sim   : {0} --- {1}'.format(
+                    dates_sim[0], dates_sim[-1]))
+
+                #  launch simulation
+                xds_ALR = ALRW.Simulate(
+                    historicalSimNum, dates_sim[0:-1], self.xds_cov_fit)
+
+                self.historicalDatesSim = dates_sim
+
+                # Save results for matlab plot
+                self.historicalBmusSim = xds_ALR.evbmus_sims.values
+                # evbmus_probcum = xds_ALR.evbmus_probcum.values
+
+
+                # convert synthetic markovs to PC values
+                # Fill in the Markov chain bmus with RMM vales
+                self.rmm1Sims = list()
+                self.rmm2Sims = list()
+                for kk in range(historicalSimNum):
+                    tempSimulation = self.historicalBmusSim[:,kk]
+                    tempPC1 = np.nan * np.ones((np.shape(tempSimulation)))
+                    tempPC2 = np.nan * np.ones((np.shape(tempSimulation)))
+
+                    self.groups = [list(j) for i, j in groupby(tempSimulation)]
+                    c = 0
+                    for gg in range(len(self.groups)):
+                        getInds = rm.sample(range(1, 100000), len(self.groups[gg]))
+                        tempPC1s = self.gevCopulaSims[int(self.groups[gg][0])-1][getInds[0], 0]
+                        tempPC2s = self.gevCopulaSims[int(self.groups[gg][0])-1][getInds[0], 1]
+                        tempPC1[c:c + len(self.groups[gg])] = tempPC1s
+                        tempPC2[c:c + len(self.groups[gg])] = tempPC2s
+                        c = c + len(self.groups[gg])
+                    self.rmm1Sims.append(tempPC1)
+                    self.rmm2Sims.append(tempPC2)
+                self.mjoHistoricalSimRmm1 = self.rmm1Sims
+                self.mjoHistoricalSimRmm2 = self.rmm2Sims
+
+            if futureSimNum > 0:
+                futureSims = []
+                for simIndex in range(futureSimNum):
+                    # ALR FUTURE model simulations
+                    sim_years = 100
+                    # start simulation at PCs available data
+                    d1 = datetime(2023, 6, 1)  # x2d(xds_cov_fit.time[0])
+                    d2 = datetime(2123, 6, 1)  # datetime(d1.year+sim_years, d1.month, d1.day)
+                    self.future_dates_sim = [d1 + timedelta(days=i) for i in range((d2 - d1).days + 1)]
+
+                    d1 = datetime(2023, 6, 1)
+                    dt = datetime(2023, 6, 1)
+                    end = datetime(2123, 6, 1)
+                    step = relativedelta(years=1)
+                    simAnnualTime = []
+                    while dt < end:
+                        simAnnualTime.append(dt)
+                        dt += step
+
+                    d1 = datetime(2023, 6, 1)
+                    dt = datetime(2023, 6, 1)
+                    end = datetime(2123, 6, 2)
+                    # step = datetime.timedelta(months=1)
+                    step = relativedelta(days=1)
+                    simDailyTime = []
+                    while dt < end:
+                        simDailyTime.append(dt)
+                        dt += step
+                    simDailyDatesMatrix = np.array([[r.year, r.month, r.day] for r in simDailyTime])
+
+                    trainingDates = [datetime(r[0], r[1], r[2]) for r in simDailyDatesMatrix]
+                    dailyAWTsim = np.ones((len(trainingDates),))
+                    dailyPC1sim = np.ones((len(trainingDates),))
+                    dailyPC2sim = np.ones((len(trainingDates),))
+                    dailyPC3sim = np.ones((len(trainingDates),))
+
+                    awtBMUsim = self.awtBmusSim[simIndex][0:100]  # [0:len(awt_bmus)]
+                    awtPC1sim = self.pc1Sims[simIndex][0:100]  # [0:len(awt_bmus)]
+                    awtPC2sim = self.pc2Sims[simIndex][0:100]  # [0:len(awt_bmus)]
+                    awtPC3sim = self.pc3Sims[simIndex][0:100]  # [0:len(awt_bmus)]
+                    dailyDatesSWTyear = np.array([r[0] for r in simDailyDatesMatrix])
+                    dailyDatesSWTmonth = np.array([r[1] for r in simDailyDatesMatrix])
+                    dailyDatesSWTday = np.array([r[2] for r in simDailyDatesMatrix])
+                    normPC1 = awtPC1sim
+                    normPC2 = awtPC2sim
+                    normPC3 = awtPC3sim
+
+                    for i in range(len(awtBMUsim)):
+                        sSeason = np.where((simDailyDatesMatrix[:, 0] == simAnnualTime[i].year) & (
+                                simDailyDatesMatrix[:, 1] == simAnnualTime[i].month) & (simDailyDatesMatrix[:, 2] == 1))
+                        ssSeason = np.where((simDailyDatesMatrix[:, 0] == simAnnualTime[i].year + 1) & (
+                                simDailyDatesMatrix[:, 1] == simAnnualTime[i].month) & (simDailyDatesMatrix[:, 2] == 1))
+
+                        dailyAWTsim[sSeason[0][0]:ssSeason[0][0] + 1] = awtBMUsim[i] * dailyAWTsim[
+                                                                                       sSeason[0][0]:ssSeason[0][0] + 1]
+                        dailyPC1sim[sSeason[0][0]:ssSeason[0][0] + 1] = normPC1[i] * np.ones(
+                            len(dailyAWTsim[sSeason[0][0]:ssSeason[0][0] + 1]), )
+                        dailyPC2sim[sSeason[0][0]:ssSeason[0][0] + 1] = normPC2[i] * np.ones(
+                            len(dailyAWTsim[sSeason[0][0]:ssSeason[0][0] + 1]), )
+                        dailyPC3sim[sSeason[0][0]:ssSeason[0][0] + 1] = normPC3[i] * np.ones(
+                            len(dailyAWTsim[sSeason[0][0]:ssSeason[0][0] + 1]), )
+
+
+                    # AWT: PCs (Generated with copula simulation. Annual data, parse to daily)
+                    self.xds_PCs_sim = xr.Dataset(
+                        {
+                            'PC1': (('time',), dailyPC1sim),
+                            'PC2': (('time',), dailyPC2sim),
+                            'PC3': (('time',), dailyPC3sim),
+                        },
+                        coords={'time': [datetime(r[0], r[1], r[2]) for r in simDailyDatesMatrix]}
+                    )
+                    # reindex annual data to daily data
+                    self.xds_PCs_sim = xr_daily(self.xds_PCs_sim)
+
+
+                    d_covars_sim = xcd_daily([self.xds_PCs_sim])
+
+                    # PCs covar
+                    cov_PCs = self.xds_PCs_sim.sel(time=slice(d_covars_sim[0], d_covars_sim[-1]))
+                    cov_1 = cov_PCs.PC1.values.reshape(-1, 1)
+                    cov_2 = cov_PCs.PC2.values.reshape(-1, 1)
+                    cov_3 = cov_PCs.PC3.values.reshape(-1, 1)
+
+                    # MJO covars
+                    # cov_MJO = xds_MJO_fit.sel(time=slice(d_covars_fit[0], d_covars_fit[-1]))
+                    # cov_4 = cov_MJO.rmm1.values.reshape(-1, 1)
+                    # cov_5 = cov_MJO.rmm2.values.reshape(-1, 1)
+
+                    # join covars and norm.
+                    cov_T = np.hstack((cov_1, cov_2, cov_3))
+
+                    # generate xarray.Dataset
+                    cov_names = ['PC1', 'PC2', 'PC3']
+                    self.xds_cov_sim = xr.Dataset(
+                        {
+                            'cov_values': (('time', 'cov_names'), cov_T),
+                        },
+                        coords={
+                            'time': d_covars_sim,
+                            'cov_names': cov_names,
+                        }
+                    )
+
+
+                    #  launch simulation
+                    xds_ALRfuture = ALRW.Simulate(
+                        1, self.future_dates_sim, self.xds_cov_sim)
+
+                    self.futureDatesSim = self.future_dates_sim
+
+                    futureSims.append(xds_ALRfuture.evbmus_sims.values)
+
+
+                # Save results for matlab plot
+                self.futureBmusSim = futureSims
+                # evbmus_probcum = xds_ALR.evbmus_probcum.values
+                # convert synthetic markovs to PC values
+                # Fill in the Markov chain bmus with RMM vales
+                rmm1Sims = list()
+                rmm2Sims = list()
+                for kk in range(len(self.futureBmusSim)):
+                    tempSimulation = self.futureBmusSim[kk]
+                    tempPC1 = np.nan * np.ones((np.shape(tempSimulation)))
+                    tempPC2 = np.nan * np.ones((np.shape(tempSimulation)))
+
+                    groups = [list(j) for i, j in groupby(tempSimulation)]
+                    c = 0
+                    for gg in range(len(groups)):
+                        getInds = rm.sample(range(1, 100000), len(groups[gg]))
+                        tempPC1s = self.gevCopulaSims[int(groups[gg][0]-1)][getInds[0], 0]
+                        tempPC2s = self.gevCopulaSims[int(groups[gg][0]-1)][getInds[0], 1]
+                        tempPC1[c:c + len(groups[gg])] = tempPC1s
+                        tempPC2[c:c + len(groups[gg])] = tempPC2s
+                        c = c + len(groups[gg])
+                    rmm1Sims.append(tempPC1)
+                    rmm2Sims.append(tempPC2)
+                self.mjoFutureSimRmm1 = rmm1Sims
+                self.mjoFutureSimRmm2 = rmm2Sims
