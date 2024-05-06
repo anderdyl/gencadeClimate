@@ -27,13 +27,13 @@ class climateIndices():
     def __init__(self, **kwargs):
 
         self.awtStart = kwargs.get('awtStart', 1880)
-        self.awtEnd = kwargs.get('awtEnd',2022)
+        self.awtEnd = kwargs.get('awtEnd',2023)
         self.ersstFolder = kwargs.get('ersstFolder', "/users/dylananderson/Documents/data/ERSSTv5/")
         self.latTop = kwargs.get('latTop', 50)
         self.resolution = kwargs.get('resolution',1)
         self.avgTime = kwargs.get('avgTime',24)
         self.startTime = kwargs.get('startTime',[1979,1,1])
-        self.endTime = kwargs.get('endTime',[2020,12,31])
+        self.endTime = kwargs.get('endTime',[2022,12,31])
         self.slpMemory = kwargs.get('slpMemory',False)
         self.slpPath = kwargs.get('slpPath')
         self.lonLeft = kwargs.get('lonLeft', 280)
@@ -52,7 +52,7 @@ class climateIndices():
             data_folder="/users/dylananderson/Documents/data/ERSSTv5/"
 
 
-            years = np.arange(self.awtStart,self.awtEnd)
+            years = np.arange(self.awtStart,self.awtEnd+1)
             months = np.arange(1,13)
             ogTime = []
             for ii in years:
@@ -72,7 +72,7 @@ class climateIndices():
                                 temp = ds
                                 SSTvalues = ds['sst']
                                 ogTime.append(datetime.datetime(ii,hh,1))
-                        elif ii == (self.awtEnd-1) and hh > 5:
+                        elif ii == (self.awtEnd) and hh > 5:
                             print("skipping {}/{}".format(ii,hh))
                         else:
                             with xr.open_dataset(os.path.join(data_folder,file)) as ds:
@@ -82,7 +82,7 @@ class climateIndices():
 
 
             dt = datetime.datetime(self.awtStart, 6, 1)
-            end = datetime.datetime((self.awtEnd-1), 6, 1)
+            end = datetime.datetime((self.awtEnd), 6, 1)
             step = relativedelta(years=1)
             sstTime = []
             while dt < end:
@@ -106,7 +106,7 @@ class climateIndices():
 
             var_name = "SST"
             y1 = self.awtStart
-            y2 = self.awtEnd-1
+            y2 = self.awtEnd
             m1 = 6
             m2 = 5
             subset = xds_predictor.sel(longitude=slice(self.lonLeft,self.lonRight),latitude=slice(self.latBottom,self.latTop))
@@ -114,7 +114,7 @@ class climateIndices():
 
             d1 = datetime.datetime(self.awtStart, 6, 1)
             dt = datetime.datetime(self.awtStart, 6, 1)
-            end = datetime.datetime((self.awtEnd-1), 6, 1)
+            end = datetime.datetime((self.awtEnd), 6, 1)
             step = relativedelta(months=1)
             monthlyTime = []
             while dt < end:
@@ -143,7 +143,7 @@ class climateIndices():
 
             d1 = datetime.datetime(self.awtStart, 6, 1)
             dt = datetime.datetime(self.awtStart, 6, 1)
-            end = datetime.datetime((self.awtEnd-1), 6, 1)
+            end = datetime.datetime((self.awtEnd), 6, 1)
             step = relativedelta(years=1)
             annualTime = []
             while dt < end:
@@ -261,7 +261,7 @@ class climateIndices():
 
             d1 = datetime.datetime(1979, 6, 1)
             dt = datetime.datetime(1979, 6, 1)
-            end = datetime.datetime(self.awtEnd-1, 6, 2)
+            end = datetime.datetime(self.awtEnd, 6, 2)
             step = relativedelta(days=1)
             dailyTime = []
             while dt < end:
@@ -510,16 +510,32 @@ class climateIndices():
             self.awtBmusSim = evbmus_sim
             self.awtDatesSim = dates_sim
 
-            # samplesPickle = 'awtSimulations.pickle'
-            # outputSamples = {}
-            # outputSamples['pc1Sims'] = pc1Sims
-            # outputSamples['pc2Sims'] = pc2Sims
-            # outputSamples['pc3Sims'] = pc3Sims
-            # # outputSamples['pc4Sims'] = pc4Sims
-            # outputSamples['evbmus_sim'] = evbmus_sim
-            # outputSamples['dates_sim'] = dates_sim
-            # with open(samplesPickle, 'wb') as f:
-            #     pickle.dump(outputSamples, f)
+            import pickle
+            samplesPickle = 'awtSimulations.pickle'
+            outputSamples = {}
+            outputSamples['pc1Sims'] = pc1Sims
+            outputSamples['pc2Sims'] = pc2Sims
+            outputSamples['pc3Sims'] = pc3Sims
+            outputSamples['evbmus_sim'] = evbmus_sim
+            outputSamples['dates_sim'] = dates_sim
+            outputSamples['PC1'] = PC1
+            outputSamples['PC2'] = PC2
+            outputSamples['PC3'] = PC3
+            outputSamples['normPC1'] = normPC1
+            outputSamples['normPC2'] = normPC2
+            outputSamples['normPC3'] = normPC3
+            outputSamples['awt_bmus'] = awt_bmus
+            outputSamples['annualTime'] = annualTime
+            outputSamples['dailyAWT'] = dailyAWT
+            outputSamples['dailyDates'] = DailyDatesMatrix
+            outputSamples['dailyTime'] = dailyTime
+            outputSamples['dailyPC1'] = dailyPC1
+            outputSamples['dailyPC2'] = dailyPC2
+            outputSamples['dailyPC3'] = dailyPC3
+            outputSamples['nPercent'] = nPercent
+
+            with open(samplesPickle, 'wb') as f:
+                pickle.dump(outputSamples, f)
 
             # awtPickle = 'awtPCs.pickle'
             # outputMWTs = {}
@@ -581,7 +597,7 @@ class climateIndices():
             from matplotlib import gridspec
             import matplotlib.colors as mcolors
             import matplotlib.patches as patches
-            from alr import ALR_WRP
+            from functions import ALR_WRP
             from functions import xds_common_dates_daily as xcd_daily
             from functions import xds_reindex_daily as xr_daily
 
@@ -596,6 +612,16 @@ class climateIndices():
             RMM2 = []
             phase = []
             amplitude = []
+
+            #http://www.bom.gov.au/clim_data/IDCKGEM000/rmm.74toRealtime.txt
+
+            from urllib import request
+            remote_url = 'http://www.bom.gov.au/clim_data/IDCKGEM000/rmm.74toRealtime.txt'
+            opener = request.build_opener()
+            opener.addheaders = [('User-Agent', 'MyApp/1.0')]
+            request.install_opener(opener)
+            file = 'mjo.txt'
+            request.urlretrieve(remote_url, file)
             # Missing Value= 1.E36 or 999
             with open('mjo.txt', newline='') as csvfile:
                 csvreader = csv.reader(csvfile, delimiter='\t')  # , quotechar='|')
@@ -627,7 +653,7 @@ class climateIndices():
                 dt += step
 
 
-            index = np.where((np.asarray(mjoTime) >= datetime.date(1979,6,1)) & (np.asarray(mjoTime) < datetime.date(self.awtEnd-1,6,1)))
+            index = np.where((np.asarray(mjoTime) >= datetime.date(1979,6,1)) & (np.asarray(mjoTime) < datetime.date(self.awtEnd,6,1)))
 
             mjoRmm1 = mjoRmm1[index]
             mjoRmm2 = mjoRmm2[index]
@@ -1026,6 +1052,19 @@ class climateIndices():
 
             ALRW.Report_Fit()  # '/media/dylananderson/Elements/NC_climate/testALR/r_Test', terms_fit==False)
 
+            samplesPickle = 'mjoSimulations.pickle'
+            outputSamples = {}
+            outputSamples['mjoBmus'] = self.mjoBmus
+            outputSamples['mjoGroups'] = self.mjoGroups
+            outputSamples['mjoPhase'] = self.mjoPhase
+            outputSamples['mjoRmm1'] = self.mjoRmm1
+            outputSamples['mjoRmm2'] = self.mjoRmm2
+            outputSamples['mjoTime'] = self.mjoTime
+            outputSamples['index'] = self.index
+            outputSamples['mjoYear'] = self.mjoYear
+            outputSamples['mjoDay'] = self.mjoDay
+            outputSamples['mjoMonth'] = self.mjoMonth
+
             if historicalSimNum > 0:
                 # Historical Simulation
                 # start simulation at PCs available data
@@ -1071,6 +1110,11 @@ class climateIndices():
                     self.rmm2Sims.append(tempPC2)
                 self.mjoHistoricalSimRmm1 = self.rmm1Sims
                 self.mjoHistoricalSimRmm2 = self.rmm2Sims
+
+                outputSamples['historicalDatesSim'] = self.historicalDatesSim
+                outputSamples['mjoHistoricalSimRmm1'] = self.mjoHistoricalSimRmm1
+                outputSamples['mjoHistoricalSimRmm2'] = self.mjoHistoricalSimRmm2
+                outputSamples['historicalBmusSim'] = self.historicalBmusSim
 
             if futureSimNum > 0:
                 futureSims = []
@@ -1211,3 +1255,13 @@ class climateIndices():
                     rmm2Sims.append(tempPC2)
                 self.mjoFutureSimRmm1 = rmm1Sims
                 self.mjoFutureSimRmm2 = rmm2Sims
+
+
+                outputSamples['mjoFutureSimRmm1'] = self.mjoFutureSimRmm1
+                outputSamples['mjoFutureSimRmm2'] = self.mjoFutureSimRmm2
+                outputSamples['futureBmusSim'] = self.futureBmusSim
+                outputSamples['futureDatesSim'] = self.futureDatesSim
+
+
+            with open(samplesPickle, 'wb') as f:
+                pickle.dump(outputSamples, f)

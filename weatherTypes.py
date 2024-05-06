@@ -4,7 +4,7 @@ import os
 from datetime import datetime, date
 from dateutil.relativedelta import relativedelta
 from netCDF4 import Dataset
-
+import xarray as xr
 
 class weatherTypes():
     '''
@@ -262,7 +262,7 @@ class weatherTypes():
                 yearExtract = tt.year
                 monthExtract = tt.month
 
-                if (yearExtract == 2011 and monthExtract >= 4) or yearExtract > 2012:
+                if (yearExtract == 2011 and monthExtract >= 4) or yearExtract > 2011:
                     file = self.slpPath + 'prmsl.cdas1.{}{:02d}.grb2.nc'.format(yearExtract,
                                                                            monthExtract)
                     # file = '/users/dylananderson/documents/data/prmsl/prmsl.cdas1.{}{:02d}.grb2.nc'.format(yearExtract,
@@ -596,7 +596,23 @@ class weatherTypes():
         self.Mx = Mx
         self.My = My
 
+        import pickle
+        samplesPickle = 'slps.pickle'
+        outputSamples = {}
+        outputSamples['x2'] = x2
+        outputSamples['y2'] = y2
+        outputSamples['xFlat'] = xFlat
+        outputSamples['yFlat'] = yFlat
+        outputSamples['isOnLandGrid'] = isOnLandGrid
+        outputSamples['isOnLandFlat'] = isOnLandFlat
+        outputSamples['SLPS'] = SLPS
+        outputSamples['GRDS'] = GRDS
+        outputSamples['DATES'] = DATES
+        outputSamples['Mx'] = Mx
+        outputSamples['My'] = My
 
+        with open(samplesPickle, 'wb') as f:
+            pickle.dump(outputSamples, f)
 
     def pcaOfSlps(self):
 
@@ -632,7 +648,22 @@ class weatherTypes():
         self.APEV = APEV
         self.nterm = nterm
 
+        import pickle
+        samplesPickle = 'pcas.pickle'
+        outputSamples = {}
+        outputSamples['SlpGrdMean'] = SlpGrdMean
+        outputSamples['SlpGrdStd'] = SlpGrdStd
+        outputSamples['SlpGrdNorm'] = SlpGrdNorm
+        outputSamples['SlpGrd'] = SlpGrd
+        outputSamples['PCs'] = PCs
+        outputSamples['EOFs'] = EOFs
+        outputSamples['variance'] = variance
+        outputSamples['nPercent'] = nPercent
+        outputSamples['APEV'] = APEV
+        outputSamples['nterm'] = nterm
 
+        with open(samplesPickle, 'wb') as f:
+            pickle.dump(outputSamples, f)
 
     def wtClusters(self,numClusters=49):
         from functions import sort_cluster_gen_corr_end
@@ -672,7 +703,319 @@ class weatherTypes():
         repmatMean = np.tile(self.SlpGrdMean, (numClusters, 1))
         self.Km_ = np.multiply(self.sorted_centroids, repmatStd) + repmatMean
 
+        import pickle
+        samplesPickle = 'dwts.pickle'
+        outputSamples = {}
+        outputSamples['Km_'] = self.Km_
+        outputSamples['sorted_centroids'] = self.sorted_centroids
+        outputSamples['sorted_cenEOFs'] = self.sorted_cenEOFs
+        outputSamples['bmus_corrected'] = self.bmus_corrected
+        outputSamples['kmaOrder'] = self.kmaOrder
+        outputSamples['dGroups'] = self.dGroups
+        outputSamples['groupSize'] = self.groupSize
+        outputSamples['numClusters'] = self.numClusters
 
+        with open(samplesPickle, 'wb') as f:
+            pickle.dump(outputSamples, f)
+
+
+
+    def alrSimulations(self,climate,historicalSimNum,futureSimNum,loadPrevious=False,plotOutput=False):
+        from functions import xds_reindex_daily as xr_daily
+        from functions import xds_common_dates_daily as xcd_daily
+
+        # xds_MJO_fit = xr.Dataset(
+        #     {
+        #         'rmm1': (('time',), mjoRmm1),
+        #         'rmm2': (('time',), mjoRmm2),
+        #     },
+        #     coords={'time': [datetime.datetime(mjoYear[r], mjoMonth[r], mjoDay[r]) for r in range(len(mjoDay))]}
+        # )
+        # # reindex to daily data after 1979-01-01 (avoid NaN)
+        # xds_MJO_fit = xr_daily(xds_MJO_fit, datetime.datetime(1979, 6, 1))
+
+        from datetime import datetime, timedelta
+        self.xds_KMA_fit = xr.Dataset(
+            {
+                'bmus': (('time',), self.bmus_corrected),
+            },
+            coords={'time': self.DATES}
+        )
+
+
+        # AWT: PCs (Generated with copula simulation. Annual data, parse to daily)
+        self.xds_PCs_fit = xr.Dataset(
+            {
+                'PC1': (('time',), climate.dailyPC1),
+                'PC2': (('time',), climate.dailyPC3),
+                'PC3': (('time',), climate.dailyPC3),
+            },
+            coords={'time': [datetime(climate.mjoYear[r], climate.mjoMonth[r], climate.mjoDay[r]) for r in range(len(climate.mjoDay))]}
+        )
+        # reindex annual data to daily data
+        self.xds_PCs_fit = xr_daily(self.xds_PCs_fit)
+
+        # MJO: RMM1s (Generated with copula simulation. Annual data, parse to daily)
+        xds_MJO_fit = xr.Dataset(
+            {
+                'rmm1': (('time',), climate.mjoRmm1),
+                'rmm2': (('time',), climate.mjoRmm2),
+            },
+            coords={'time': [datetime(climate.mjoYear[r], climate.mjoMonth[r], climate.mjoDay[r]) for r in range(len(climate.mjoDay))]}
+            # coords = {'time': timeMJO}
+        )
+        # reindex to daily data after 1979-01-01 (avoid NaN)
+        # xds_MJO_fit = xr_daily(xds_MJO_fit, datetime(1979, 6, 1), datetime(2023, 5, 31))
+
+        # --------------------------------------
+        # Mount covariates matrix
+
+        # available data:
+        # model fit: xds_KMA_fit, xds_MJO_fit, xds_PCs_fit
+        # model sim: xds_MJO_sim, xds_PCs_sim
+
+        # covariates: FIT
+        # d_covars_fit = xcd_daily([xds_MJO_fit, xds_PCs_fit, xds_KMA_fit])
+        d_covars_fit = xcd_daily([self.xds_PCs_fit, self.xds_KMA_fit])
+
+        # PCs covar
+        cov_PCs = self.xds_PCs_fit.sel(time=slice(d_covars_fit[0], d_covars_fit[-1]))
+        cov_1 = cov_PCs.PC1.values.reshape(-1, 1)
+        cov_2 = cov_PCs.PC2.values.reshape(-1, 1)
+        cov_3 = cov_PCs.PC3.values.reshape(-1, 1)
+
+        # MJO covars
+        cov_MJO = xds_MJO_fit.sel(time=slice(d_covars_fit[0], d_covars_fit[-1]))
+        cov_4 = cov_MJO.rmm1.values.reshape(-1, 1)
+        cov_5 = cov_MJO.rmm2.values.reshape(-1, 1)
+
+        # join covars and norm.
+        cov_T = np.hstack((cov_1, cov_2, cov_3))
+
+        # generate xarray.Dataset
+        cov_names = ['PC1', 'PC2', 'PC3']
+        self.xds_cov_fit = xr.Dataset(
+            {
+                'cov_values': (('time', 'cov_names'), cov_T),
+            },
+            coords={
+                'time': d_covars_fit,
+                'cov_names': cov_names,
+            }
+        )
+
+        # use bmus inside covariate time frame
+        self.xds_bmus_fit = self.xds_KMA_fit.sel(
+            time=slice(d_covars_fit[0], d_covars_fit[-1])
+        )
+
+        bmus = self.xds_bmus_fit.bmus
+
+        # Autoregressive logistic wrapper
+        num_clusters = 25
+        sim_num = 100
+        fit_and_save = True  # False for loading
+        p_test_ALR = '/Users/dylananderson/Documents/duneLifeCycles/'
+
+        # ALR terms
+        self.d_terms_settings = {
+            'mk_order': 2,
+            'constant': True,
+            'long_term': False,
+            'seasonality': (False,),  # [2, 4, 6]),
+            'covariates': (True, self.xds_cov_fit),
+        }
+        # Autoregressive logistic wrapper
+        ALRW = ALR_WRP(p_test_ALR)
+        ALRW.SetFitData(
+            num_clusters, self.xds_bmus_fit, self.d_terms_settings)
+
+        ALRW.FitModel(max_iter=20000)
+
+        # p_report = op.join(p_data, 'r_{0}'.format(name_test))
+
+        ALRW.Report_Fit()  # '/media/dylananderson/Elements/NC_climate/testALR/r_Test', terms_fit==False)
+
+        if historicalSimNum > 0:
+            # Historical Simulation
+            # start simulation at PCs available data
+            d1 = datetime(1979, 6, 1)  # x2d(xds_cov_fit.time[0])
+            d2 = datetime(2023, 6, 1)  # datetime(d1.year+sim_years, d1.month, d1.day)
+            dates_sim = [d1 + timedelta(days=i) for i in range((d2 - d1).days + 1)]
+            # print some info
+            # print('ALR model fit   : {0} --- {1}'.format(
+            #    d_covars_fit[0], d_covars_fit[-1]))
+            print('ALR model sim   : {0} --- {1}'.format(
+                dates_sim[0], dates_sim[-1]))
+
+            #  launch simulation
+            xds_ALR = ALRW.Simulate(
+                historicalSimNum, dates_sim[0:-1], self.xds_cov_fit)
+
+            self.historicalDatesSim = dates_sim
+
+            # Save results for matlab plot
+            self.historicalBmusSim = xds_ALR.evbmus_sims.values
+            # evbmus_probcum = xds_ALR.evbmus_probcum.values
+
+            # convert synthetic markovs to PC values
+            # Fill in the Markov chain bmus with RMM vales
+            self.rmm1Sims = list()
+            self.rmm2Sims = list()
+            for kk in range(historicalSimNum):
+                tempSimulation = self.historicalBmusSim[:, kk]
+                tempPC1 = np.nan * np.ones((np.shape(tempSimulation)))
+                tempPC2 = np.nan * np.ones((np.shape(tempSimulation)))
+
+                self.groups = [list(j) for i, j in groupby(tempSimulation)]
+                c = 0
+                for gg in range(len(self.groups)):
+                    getInds = rm.sample(range(1, 100000), len(self.groups[gg]))
+                    tempPC1s = self.gevCopulaSims[int(self.groups[gg][0]) - 1][getInds[0], 0]
+                    tempPC2s = self.gevCopulaSims[int(self.groups[gg][0]) - 1][getInds[0], 1]
+                    tempPC1[c:c + len(self.groups[gg])] = tempPC1s
+                    tempPC2[c:c + len(self.groups[gg])] = tempPC2s
+                    c = c + len(self.groups[gg])
+                self.rmm1Sims.append(tempPC1)
+                self.rmm2Sims.append(tempPC2)
+            self.mjoHistoricalSimRmm1 = self.rmm1Sims
+            self.mjoHistoricalSimRmm2 = self.rmm2Sims
+
+        if futureSimNum > 0:
+            futureSims = []
+            for simIndex in range(futureSimNum):
+                # ALR FUTURE model simulations
+                sim_years = 100
+                # start simulation at PCs available data
+                d1 = datetime(2023, 6, 1)  # x2d(xds_cov_fit.time[0])
+                d2 = datetime(2123, 6, 1)  # datetime(d1.year+sim_years, d1.month, d1.day)
+                self.future_dates_sim = [d1 + timedelta(days=i) for i in range((d2 - d1).days + 1)]
+
+                d1 = datetime(2023, 6, 1)
+                dt = datetime(2023, 6, 1)
+                end = datetime(2123, 6, 1)
+                step = relativedelta(years=1)
+                simAnnualTime = []
+                while dt < end:
+                    simAnnualTime.append(dt)
+                    dt += step
+
+                d1 = datetime(2023, 6, 1)
+                dt = datetime(2023, 6, 1)
+                end = datetime(2123, 6, 2)
+                # step = datetime.timedelta(months=1)
+                step = relativedelta(days=1)
+                simDailyTime = []
+                while dt < end:
+                    simDailyTime.append(dt)
+                    dt += step
+                simDailyDatesMatrix = np.array([[r.year, r.month, r.day] for r in simDailyTime])
+
+                trainingDates = [datetime(r[0], r[1], r[2]) for r in simDailyDatesMatrix]
+                dailyAWTsim = np.ones((len(trainingDates),))
+                dailyPC1sim = np.ones((len(trainingDates),))
+                dailyPC2sim = np.ones((len(trainingDates),))
+                dailyPC3sim = np.ones((len(trainingDates),))
+
+                awtBMUsim = self.awtBmusSim[simIndex][0:100]  # [0:len(awt_bmus)]
+                awtPC1sim = self.pc1Sims[simIndex][0:100]  # [0:len(awt_bmus)]
+                awtPC2sim = self.pc2Sims[simIndex][0:100]  # [0:len(awt_bmus)]
+                awtPC3sim = self.pc3Sims[simIndex][0:100]  # [0:len(awt_bmus)]
+                dailyDatesSWTyear = np.array([r[0] for r in simDailyDatesMatrix])
+                dailyDatesSWTmonth = np.array([r[1] for r in simDailyDatesMatrix])
+                dailyDatesSWTday = np.array([r[2] for r in simDailyDatesMatrix])
+                normPC1 = awtPC1sim
+                normPC2 = awtPC2sim
+                normPC3 = awtPC3sim
+
+                for i in range(len(awtBMUsim)):
+                    sSeason = np.where((simDailyDatesMatrix[:, 0] == simAnnualTime[i].year) & (
+                            simDailyDatesMatrix[:, 1] == simAnnualTime[i].month) & (simDailyDatesMatrix[:, 2] == 1))
+                    ssSeason = np.where((simDailyDatesMatrix[:, 0] == simAnnualTime[i].year + 1) & (
+                            simDailyDatesMatrix[:, 1] == simAnnualTime[i].month) & (simDailyDatesMatrix[:, 2] == 1))
+
+                    dailyAWTsim[sSeason[0][0]:ssSeason[0][0] + 1] = awtBMUsim[i] * dailyAWTsim[
+                                                                                   sSeason[0][0]:ssSeason[0][0] + 1]
+                    dailyPC1sim[sSeason[0][0]:ssSeason[0][0] + 1] = normPC1[i] * np.ones(
+                        len(dailyAWTsim[sSeason[0][0]:ssSeason[0][0] + 1]), )
+                    dailyPC2sim[sSeason[0][0]:ssSeason[0][0] + 1] = normPC2[i] * np.ones(
+                        len(dailyAWTsim[sSeason[0][0]:ssSeason[0][0] + 1]), )
+                    dailyPC3sim[sSeason[0][0]:ssSeason[0][0] + 1] = normPC3[i] * np.ones(
+                        len(dailyAWTsim[sSeason[0][0]:ssSeason[0][0] + 1]), )
+
+                # AWT: PCs (Generated with copula simulation. Annual data, parse to daily)
+                self.xds_PCs_sim = xr.Dataset(
+                    {
+                        'PC1': (('time',), dailyPC1sim),
+                        'PC2': (('time',), dailyPC2sim),
+                        'PC3': (('time',), dailyPC3sim),
+                    },
+                    coords={'time': [datetime(r[0], r[1], r[2]) for r in simDailyDatesMatrix]}
+                )
+                # reindex annual data to daily data
+                self.xds_PCs_sim = xr_daily(self.xds_PCs_sim)
+
+                d_covars_sim = xcd_daily([self.xds_PCs_sim])
+
+                # PCs covar
+                cov_PCs = self.xds_PCs_sim.sel(time=slice(d_covars_sim[0], d_covars_sim[-1]))
+                cov_1 = cov_PCs.PC1.values.reshape(-1, 1)
+                cov_2 = cov_PCs.PC2.values.reshape(-1, 1)
+                cov_3 = cov_PCs.PC3.values.reshape(-1, 1)
+
+                # MJO covars
+                # cov_MJO = xds_MJO_fit.sel(time=slice(d_covars_fit[0], d_covars_fit[-1]))
+                # cov_4 = cov_MJO.rmm1.values.reshape(-1, 1)
+                # cov_5 = cov_MJO.rmm2.values.reshape(-1, 1)
+
+                # join covars and norm.
+                cov_T = np.hstack((cov_1, cov_2, cov_3))
+
+                # generate xarray.Dataset
+                cov_names = ['PC1', 'PC2', 'PC3']
+                self.xds_cov_sim = xr.Dataset(
+                    {
+                        'cov_values': (('time', 'cov_names'), cov_T),
+                    },
+                    coords={
+                        'time': d_covars_sim,
+                        'cov_names': cov_names,
+                    }
+                )
+
+                #  launch simulation
+                xds_ALRfuture = ALRW.Simulate(
+                    1, self.future_dates_sim, self.xds_cov_sim)
+
+                self.futureDatesSim = self.future_dates_sim
+
+                futureSims.append(xds_ALRfuture.evbmus_sims.values)
+
+            # Save results for matlab plot
+            self.futureBmusSim = futureSims
+            # evbmus_probcum = xds_ALR.evbmus_probcum.values
+            # convert synthetic markovs to PC values
+            # Fill in the Markov chain bmus with RMM vales
+            rmm1Sims = list()
+            rmm2Sims = list()
+            for kk in range(len(self.futureBmusSim)):
+                tempSimulation = self.futureBmusSim[kk]
+                tempPC1 = np.nan * np.ones((np.shape(tempSimulation)))
+                tempPC2 = np.nan * np.ones((np.shape(tempSimulation)))
+
+                groups = [list(j) for i, j in groupby(tempSimulation)]
+                c = 0
+                for gg in range(len(groups)):
+                    getInds = rm.sample(range(1, 100000), len(groups[gg]))
+                    tempPC1s = self.gevCopulaSims[int(groups[gg][0] - 1)][getInds[0], 0]
+                    tempPC2s = self.gevCopulaSims[int(groups[gg][0] - 1)][getInds[0], 1]
+                    tempPC1[c:c + len(groups[gg])] = tempPC1s
+                    tempPC2[c:c + len(groups[gg])] = tempPC2s
+                    c = c + len(groups[gg])
+                rmm1Sims.append(tempPC1)
+                rmm2Sims.append(tempPC2)
+            self.mjoFutureSimRmm1 = rmm1Sims
+            self.mjoFutureSimRmm2 = rmm2Sims
 
     #
     # def separateDistributions(self):
