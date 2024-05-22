@@ -28,72 +28,186 @@ def plotOceanConditions(struct):
     ax4.set_ylabel('wl (m)')
 
 
-def plotWTs(struct):
+def plotWTs(struct,withTCs=True):
     import matplotlib.cm as cm
     import matplotlib.pyplot as plt
     from matplotlib import gridspec
     from mpl_toolkits.basemap import Basemap
     import numpy as np
 
-    dwtcolors = cm.rainbow(np.linspace(0, 1, struct.numClusters))
+    if withTCs == True:
+        dwtcolors = cm.rainbow(np.linspace(0, 1, struct.numClusters+struct.num_clustersTC))
 
-    # plotting the EOF patterns
-    fig2 = plt.figure(figsize=(10, 10))
-    gs1 = gridspec.GridSpec(int(np.ceil(np.sqrt(struct.numClusters))), int(np.ceil(np.sqrt(struct.numClusters))))
-    gs1.update(wspace=0.00, hspace=0.00)  # set the spacing between axes.
-    c1 = 0
-    c2 = 0
-    counter = 0
-    plotIndx = 0
-    plotIndy = 0
-    for hh in range(struct.numClusters):
-        # p1 = plt.subplot2grid((6,6),(c1,c2))
-        ax = plt.subplot(gs1[hh])
-        num = struct.kmaOrder[hh]
+        # plotting the EOF patterns
+        fig2 = plt.figure(figsize=(10, 10))
+        # gs1 = gridspec.GridSpec(int(np.ceil(np.sqrt(struct.numClustersETC))), int(np.ceil(np.sqrt(struct.numClustersETC))))
+        gs1 = gridspec.GridSpec(int(10), int(7))
 
-        spatialField = struct.Km_[(hh), 0:len(struct.xFlat[~struct.isOnLandFlat])] / 100 - struct.SlpGrdMean[0:len(
-            struct.xFlat[~struct.isOnLandFlat])] / 100
-        # spatialField = np.multiply(EOFs[hh, len(self.xFlat[~self.isOnLandFlat]):], np.sqrt(variance[hh]))
-        X_in = struct.xFlat[~struct.isOnLandFlat]
-        Y_in = struct.yFlat[~struct.isOnLandFlat]
-        sea_nodes = []
-        for qq in range(len(X_in)):
-            sea_nodes.append(np.where((struct.xGrid == X_in[qq]) & (struct.yGrid == Y_in[qq])))
+        gs1.update(wspace=0.00, hspace=0.00)  # set the spacing between axes.
+        c1 = 0
+        c2 = 0
+        counter = 0
+        plotIndx = 0
+        plotIndy = 0
+        for hh in range(struct.numClusters):
+            # p1 = plt.subplot2grid((6,6),(c1,c2))
+            ax = plt.subplot(gs1[hh])
+            num = struct.kmaOrderETC[hh]
 
-        rectField = np.ones((np.shape(struct.xGrid))) * np.nan
-        for tt in range(len(sea_nodes)):
-            rectField[sea_nodes[tt]] = spatialField[tt]
+            spatialField = struct.Km_ETC[(hh), 0:len(struct.xFlat[~struct.isOnLandFlat])] / 100 - struct.SlpGrdMean[0:len(
+                struct.xFlat[~struct.isOnLandFlat])] / 100
+            # spatialField = np.multiply(EOFs[hh, len(self.xFlat[~self.isOnLandFlat]):], np.sqrt(variance[hh]))
+            X_in = struct.xFlat[~struct.isOnLandFlat]
+            Y_in = struct.yFlat[~struct.isOnLandFlat]
+            sea_nodes = []
+            for qq in range(len(X_in)):
+                sea_nodes.append(np.where((struct.xGrid == X_in[qq]) & (struct.yGrid == Y_in[qq])))
 
-        clevels = np.arange(-32, 32, 1)
-        # m = Basemap(projection='merc', llcrnrlat=2, urcrnrlat=52, llcrnrlon=270, urcrnrlon=360, lat_ts=25,
-        #             resolution='c')
-        m = Basemap(projection='merc', llcrnrlat=10, urcrnrlat=45, llcrnrlon=255, urcrnrlon=345, lat_ts=20,
-                    resolution='c')
-        m.fillcontinents(color=dwtcolors[hh])
-        cx, cy = m(struct.xGrid, struct.yGrid)
-        m.drawcoastlines()
-        CS = m.contourf(cx, cy, rectField, clevels, vmin=-20, vmax=20, cmap=cm.RdBu_r)  # , shading='gouraud')
-        # p1.set_title('EOF {} = {}%'.format(hh+1,np.round(nPercent[hh]*10000)/100))
-        tx, ty = m(320, 10)
-        ax.text(tx, ty, '{}'.format(struct.groupSize[num]))
+            rectField = np.ones((np.shape(struct.xGrid))) * np.nan
+            for tt in range(len(sea_nodes)):
+                rectField[sea_nodes[tt]] = spatialField[tt]
 
-        c2 += 1
-        if c2 == int(np.ceil(np.sqrt(struct.numClusters)) - 1):
-            c1 += 1
-            c2 = 0
+            clevels = np.arange(-32, 32, 1)
+            # m = Basemap(projection='merc', llcrnrlat=2, urcrnrlat=52, llcrnrlon=270, urcrnrlon=360, lat_ts=25,
+            #             resolution='c')
+            m = Basemap(projection='merc', llcrnrlat=10, urcrnrlat=45, llcrnrlon=255, urcrnrlon=345, lat_ts=20,
+                        resolution='c')
+            m.fillcontinents(color=dwtcolors[hh])
+            cx, cy = m(struct.xGrid, struct.yGrid)
+            m.drawcoastlines()
+            CS = m.contourf(cx, cy, rectField, clevels, vmin=-20, vmax=20, cmap=cm.RdBu_r)  # , shading='gouraud')
+            # p1.set_title('EOF {} = {}%'.format(hh+1,np.round(nPercent[hh]*10000)/100))
+            tx, ty = m(320, 10)
+            ax.text(tx, ty, '{}'.format(struct.groupSizeETC[num]))
 
-        if plotIndx <= np.ceil(np.sqrt(struct.numClusters)):
-            ax.xaxis.set_ticks([])
-            ax.xaxis.set_ticklabels([])
-        if plotIndy > 0:
-            ax.yaxis.set_ticklabels([])
-            ax.yaxis.set_ticks([])
-        counter = counter + 1
-        if plotIndy <= np.ceil(np.sqrt(struct.numClusters)):
-            plotIndy = plotIndy + 1
-        else:
-            plotIndy = 0
-            plotIndx = plotIndx + 1
+            c2 += 1
+            if c2 == int(np.ceil(np.sqrt(struct.numClusters)) - 1):
+                c1 += 1
+                c2 = 0
+
+            if plotIndx <= np.ceil(np.sqrt(struct.numClusters)):
+                ax.xaxis.set_ticks([])
+                ax.xaxis.set_ticklabels([])
+            if plotIndy > 0:
+                ax.yaxis.set_ticklabels([])
+                ax.yaxis.set_ticks([])
+            counter = counter + 1
+            if plotIndy <= np.ceil(np.sqrt(struct.numClusters)):
+                plotIndy = plotIndy + 1
+            else:
+                plotIndy = 0
+                plotIndx = plotIndx + 1
+
+        for hh in range(struct.num_clustersTC):
+            # p1 = plt.subplot2grid((6,6),(c1,c2))
+            ax = plt.subplot(gs1[hh+49])
+            num = hh#struct.kmaOrderTC[hh]
+
+            spatialField = struct.Km_TC[(hh), 0:len(struct.xFlat[~struct.isOnLandFlat])] / 100 - struct.SlpGrdMean[0:len(
+                struct.xFlat[~struct.isOnLandFlat])] / 100
+            # spatialField = np.multiply(EOFs[hh, len(self.xFlat[~self.isOnLandFlat]):], np.sqrt(variance[hh]))
+            X_in = struct.xFlat[~struct.isOnLandFlat]
+            Y_in = struct.yFlat[~struct.isOnLandFlat]
+            sea_nodes = []
+            for qq in range(len(X_in)):
+                sea_nodes.append(np.where((struct.xGrid == X_in[qq]) & (struct.yGrid == Y_in[qq])))
+
+            rectField = np.ones((np.shape(struct.xGrid))) * np.nan
+            for tt in range(len(sea_nodes)):
+                rectField[sea_nodes[tt]] = spatialField[tt]
+
+            clevels = np.arange(-32, 32, 1)
+            # m = Basemap(projection='merc', llcrnrlat=2, urcrnrlat=52, llcrnrlon=270, urcrnrlon=360, lat_ts=25,
+            #             resolution='c')
+            m = Basemap(projection='merc', llcrnrlat=10, urcrnrlat=45, llcrnrlon=255, urcrnrlon=345, lat_ts=20,
+                        resolution='c')
+            m.fillcontinents(color=dwtcolors[hh+49])
+            cx, cy = m(struct.xGrid, struct.yGrid)
+            m.drawcoastlines()
+            CS = m.contourf(cx, cy, rectField, clevels, vmin=-20, vmax=20, cmap=cm.RdBu_r)  # , shading='gouraud')
+            # p1.set_title('EOF {} = {}%'.format(hh+1,np.round(nPercent[hh]*10000)/100))
+            tx, ty = m(320, 10)
+            ax.text(tx, ty, '{}'.format(struct.groupSizeTC[num]))
+
+            c2 += 1
+            if c2 == int(np.ceil(np.sqrt(struct.numClusters)) - 1):
+                c1 += 1
+                c2 = 0
+
+            if plotIndx <= np.ceil(np.sqrt(struct.numClusters)):
+                ax.xaxis.set_ticks([])
+                ax.xaxis.set_ticklabels([])
+            if plotIndy > 0:
+                ax.yaxis.set_ticklabels([])
+                ax.yaxis.set_ticks([])
+            counter = counter + 1
+            if plotIndy <= np.ceil(np.sqrt(struct.numClusters)):
+                plotIndy = plotIndy + 1
+            else:
+                plotIndy = 0
+                plotIndx = plotIndx + 1
+
+
+    else:
+        dwtcolors = cm.rainbow(np.linspace(0, 1, struct.numClusters))
+
+        # plotting the EOF patterns
+        fig2 = plt.figure(figsize=(10, 10))
+        gs1 = gridspec.GridSpec(int(np.ceil(np.sqrt(struct.numClusters))), int(np.ceil(np.sqrt(struct.numClusters))))
+        gs1.update(wspace=0.00, hspace=0.00)  # set the spacing between axes.
+        c1 = 0
+        c2 = 0
+        counter = 0
+        plotIndx = 0
+        plotIndy = 0
+        for hh in range(struct.numClusters):
+            # p1 = plt.subplot2grid((6,6),(c1,c2))
+            ax = plt.subplot(gs1[hh])
+            num = struct.kmaOrderETC[hh]
+
+            spatialField = struct.Km_ETC[(hh), 0:len(struct.xFlat[~struct.isOnLandFlat])] / 100 - struct.SlpGrdMean[0:len(
+                struct.xFlat[~struct.isOnLandFlat])] / 100
+            # spatialField = np.multiply(EOFs[hh, len(self.xFlat[~self.isOnLandFlat]):], np.sqrt(variance[hh]))
+            X_in = struct.xFlat[~struct.isOnLandFlat]
+            Y_in = struct.yFlat[~struct.isOnLandFlat]
+            sea_nodes = []
+            for qq in range(len(X_in)):
+                sea_nodes.append(np.where((struct.xGrid == X_in[qq]) & (struct.yGrid == Y_in[qq])))
+
+            rectField = np.ones((np.shape(struct.xGrid))) * np.nan
+            for tt in range(len(sea_nodes)):
+                rectField[sea_nodes[tt]] = spatialField[tt]
+
+            clevels = np.arange(-32, 32, 1)
+            # m = Basemap(projection='merc', llcrnrlat=2, urcrnrlat=52, llcrnrlon=270, urcrnrlon=360, lat_ts=25,
+            #             resolution='c')
+            m = Basemap(projection='merc', llcrnrlat=10, urcrnrlat=45, llcrnrlon=255, urcrnrlon=345, lat_ts=20,
+                        resolution='c')
+            m.fillcontinents(color=dwtcolors[hh])
+            cx, cy = m(struct.xGrid, struct.yGrid)
+            m.drawcoastlines()
+            CS = m.contourf(cx, cy, rectField, clevels, vmin=-20, vmax=20, cmap=cm.RdBu_r)  # , shading='gouraud')
+            # p1.set_title('EOF {} = {}%'.format(hh+1,np.round(nPercent[hh]*10000)/100))
+            tx, ty = m(320, 10)
+            ax.text(tx, ty, '{}'.format(struct.groupSizeETC[num]))
+
+            c2 += 1
+            if c2 == int(np.ceil(np.sqrt(struct.numClusters)) - 1):
+                c1 += 1
+                c2 = 0
+
+            if plotIndx <= np.ceil(np.sqrt(struct.numClusters)):
+                ax.xaxis.set_ticks([])
+                ax.xaxis.set_ticklabels([])
+            if plotIndy > 0:
+                ax.yaxis.set_ticklabels([])
+                ax.yaxis.set_ticks([])
+            counter = counter + 1
+            if plotIndy <= np.ceil(np.sqrt(struct.numClusters)):
+                plotIndy = plotIndy + 1
+            else:
+                plotIndy = 0
+                plotIndx = plotIndx + 1
 
 
 def plotSlpExample(struct, plotTime=0):
@@ -291,7 +405,8 @@ def plotSeasonal(struct):
 
         return [dp1 + timedelta(days=i) for i in range((dp2 - dp1).days)]
 
-    tC = [datetime.utcfromtimestamp((qq - np.datetime64(0, 's')) / np.timedelta64(1, 's')) for qq in struct.DATES]
+    # tC = [datetime.utcfromtimestamp((qq - np.datetime64(0, 's')) / np.timedelta64(1, 's')) for qq in struct.DATES]
+    tC = struct.DATES
 
     bmus_dates_months = np.array([d.month for d in tC])
     bmus_dates_days = np.array([d.day for d in tC])
@@ -299,7 +414,9 @@ def plotSeasonal(struct):
 
     # generate perpetual year list
     list_pyear = GenOneYearDaily(month_ini=6)
-    m_plot = np.zeros((struct.numClusters, len(list_pyear))) * np.nan
+    # m_plot = np.zeros((struct.numClusters, len(list_pyear))) * np.nan
+    m_plot = np.zeros((int(np.max(struct.bmus_corrected)+1), len(list_pyear))) * np.nan
+
     numberOfSims = 1
     # sort data
     for i, dpy in enumerate(list_pyear):
@@ -309,21 +426,22 @@ def plotSeasonal(struct):
        b = struct.bmus_corrected[s]
        b = b.flatten()
 
-       for j in range(struct.numClusters):
+       for j in range(int(np.max(struct.bmus_corrected)+1)):
           _, bb = np.where([(j == b)])  # j+1 starts at 1 bmus value!
 
           m_plot[j, i] = float(len(bb) / float(numberOfSims)) / len(s)
 
     import matplotlib.cm as cm
     # dwtcolors = cm.viridis(np.linspace(0, 1, struct.numClusters))
-    dwtcolors = cm.rainbow(np.linspace(0, 1, struct.numClusters))
+    # dwtcolors = cm.rainbow(np.linspace(0, 1, struct.numClusters))
+    dwtcolors = cm.rainbow(np.linspace(0, 1, int(np.max(struct.bmus_corrected)+1)))
 
 
     fig = plt.figure()
     ax = plt.subplot2grid((1,1),(0,0))
     # plot stacked bars
     bottom_val = np.zeros(m_plot[1, :].shape)
-    for r in range(struct.numClusters):
+    for r in range(int(np.max(struct.bmus_corrected)+1)):
        row_val = m_plot[r, :]
        ax.bar(list_pyear, row_val, bottom=bottom_val,width=1, color=np.array([dwtcolors[r]]))
        # store bottom
