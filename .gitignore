@@ -6,10 +6,12 @@
 
 # any pickle data files
 *.pickle
-
-#
 *.nc
 *.mat
+*.txt
+
+#no matlab
+*.m
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

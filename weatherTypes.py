@@ -5,6 +5,7 @@ from datetime import datetime, date
 from dateutil.relativedelta import relativedelta
 from netCDF4 import Dataset
 import xarray as xr
+from itertools import groupby
 
 class weatherTypes():
     '''
@@ -906,24 +907,16 @@ class weatherTypes():
     def alrSimulations(self,climate,historicalSimNum,futureSimNum,loadPrevious=False,plotOutput=False):
         from functions import xds_reindex_daily as xr_daily
         from functions import xds_common_dates_daily as xcd_daily
-
-        # xds_MJO_fit = xr.Dataset(
-        #     {
-        #         'rmm1': (('time',), mjoRmm1),
-        #         'rmm2': (('time',), mjoRmm2),
-        #     },
-        #     coords={'time': [datetime.datetime(mjoYear[r], mjoMonth[r], mjoDay[r]) for r in range(len(mjoDay))]}
-        # )
-        # # reindex to daily data after 1979-01-01 (avoid NaN)
-        # xds_MJO_fit = xr_daily(xds_MJO_fit, datetime.datetime(1979, 6, 1))
+        from functions import ALR_WRP
 
         from datetime import datetime, timedelta
         self.xds_KMA_fit = xr.Dataset(
             {
                 'bmus': (('time',), self.bmus_corrected),
             },
-            coords={'time': self.DATES}
+            coords={'time': [x for x in self.DATES]}
         )
+        self.xds_KMA_fit = xr_daily(self.xds_KMA_fit, datetime(1979, 6, 1), datetime(2024, 5, 31))
 
 
         # AWT: PCs (Generated with copula simulation. Annual data, parse to daily)
@@ -936,10 +929,10 @@ class weatherTypes():
             coords={'time': [datetime(climate.mjoYear[r], climate.mjoMonth[r], climate.mjoDay[r]) for r in range(len(climate.mjoDay))]}
         )
         # reindex annual data to daily data
-        self.xds_PCs_fit = xr_daily(self.xds_PCs_fit)
+        self.xds_PCs_fit = xr_daily(self.xds_PCs_fit, datetime(1979, 6, 1), datetime(2024, 5, 31))
 
         # MJO: RMM1s (Generated with copula simulation. Annual data, parse to daily)
-        xds_MJO_fit = xr.Dataset(
+        self.xds_MJO_fit = xr.Dataset(
             {
                 'rmm1': (('time',), climate.mjoRmm1),
                 'rmm2': (('time',), climate.mjoRmm2),
@@ -948,7 +941,7 @@ class weatherTypes():
             # coords = {'time': timeMJO}
         )
         # reindex to daily data after 1979-01-01 (avoid NaN)
-        # xds_MJO_fit = xr_daily(xds_MJO_fit, datetime(1979, 6, 1), datetime(2023, 5, 31))
+        self.xds_MJO_fit = xr_daily(self.xds_MJO_fit, datetime(1979, 6, 1), datetime(2024, 5, 31))
 
         # --------------------------------------
         # Mount covariates matrix
@@ -959,43 +952,43 @@ class weatherTypes():
 
         # covariates: FIT
         # d_covars_fit = xcd_daily([xds_MJO_fit, xds_PCs_fit, xds_KMA_fit])
-        d_covars_fit = xcd_daily([self.xds_PCs_fit, self.xds_KMA_fit])
+        self.d_covars_fit = xcd_daily([self.xds_PCs_fit, self.xds_MJO_fit, self.xds_KMA_fit])
 
         # PCs covar
-        cov_PCs = self.xds_PCs_fit.sel(time=slice(d_covars_fit[0], d_covars_fit[-1]))
+        cov_PCs = self.xds_PCs_fit.sel(time=slice(self.d_covars_fit[0], self.d_covars_fit[-1]))
         cov_1 = cov_PCs.PC1.values.reshape(-1, 1)
         cov_2 = cov_PCs.PC2.values.reshape(-1, 1)
         cov_3 = cov_PCs.PC3.values.reshape(-1, 1)
 
         # MJO covars
-        cov_MJO = xds_MJO_fit.sel(time=slice(d_covars_fit[0], d_covars_fit[-1]))
+        cov_MJO = self.xds_MJO_fit.sel(time=slice(self.d_covars_fit[0], self.d_covars_fit[-1]))
         cov_4 = cov_MJO.rmm1.values.reshape(-1, 1)
         cov_5 = cov_MJO.rmm2.values.reshape(-1, 1)
 
         # join covars and norm.
-        cov_T = np.hstack((cov_1, cov_2, cov_3))
+        cov_T = np.hstack((cov_1, cov_2, cov_3, cov_4, cov_5))
 
         # generate xarray.Dataset
-        cov_names = ['PC1', 'PC2', 'PC3']
+        cov_names = ['PC1', 'PC2', 'PC3', 'MJO1', 'MJO2']
         self.xds_cov_fit = xr.Dataset(
             {
                 'cov_values': (('time', 'cov_names'), cov_T),
             },
             coords={
-                'time': d_covars_fit,
+                'time': self.d_covars_fit,
                 'cov_names': cov_names,
             }
         )
 
         # use bmus inside covariate time frame
         self.xds_bmus_fit = self.xds_KMA_fit.sel(
-            time=slice(d_covars_fit[0], d_covars_fit[-1])
+            time=slice(self.d_covars_fit[0], self.d_covars_fit[-1])
         )
 
         bmus = self.xds_bmus_fit.bmus
 
         # Autoregressive logistic wrapper
-        num_clusters = 25
+        num_clusters = int(np.max(self.bmus)+1)#self.num_clustersTC+self.num_clustersETC
         sim_num = 100
         fit_and_save = True  # False for loading
         p_test_ALR = '/Users/dylananderson/Documents/duneLifeCycles/'
@@ -1003,9 +996,9 @@ class weatherTypes():
         # ALR terms
         self.d_terms_settings = {
             'mk_order': 2,
-            'constant': True,
-            'long_term': False,
-            'seasonality': (False,),  # [2, 4, 6]),
+            'constant': False,
+            'long_term': True,
+            'seasonality': (True, [2, 4]),
             'covariates': (True, self.xds_cov_fit),
         }
         # Autoregressive logistic wrapper
@@ -1023,7 +1016,7 @@ class weatherTypes():
             # Historical Simulation
             # start simulation at PCs available data
             d1 = datetime(1979, 6, 1)  # x2d(xds_cov_fit.time[0])
-            d2 = datetime(2023, 6, 1)  # datetime(d1.year+sim_years, d1.month, d1.day)
+            d2 = datetime(2024, 6, 1)  # datetime(d1.year+sim_years, d1.month, d1.day)
             dates_sim = [d1 + timedelta(days=i) for i in range((d2 - d1).days + 1)]
             # print some info
             # print('ALR model fit   : {0} --- {1}'.format(
@@ -1041,28 +1034,6 @@ class weatherTypes():
             self.historicalBmusSim = xds_ALR.evbmus_sims.values
             # evbmus_probcum = xds_ALR.evbmus_probcum.values
 
-            # convert synthetic markovs to PC values
-            # Fill in the Markov chain bmus with RMM vales
-            self.rmm1Sims = list()
-            self.rmm2Sims = list()
-            for kk in range(historicalSimNum):
-                tempSimulation = self.historicalBmusSim[:, kk]
-                tempPC1 = np.nan * np.ones((np.shape(tempSimulation)))
-                tempPC2 = np.nan * np.ones((np.shape(tempSimulation)))
-
-                self.groups = [list(j) for i, j in groupby(tempSimulation)]
-                c = 0
-                for gg in range(len(self.groups)):
-                    getInds = rm.sample(range(1, 100000), len(self.groups[gg]))
-                    tempPC1s = self.gevCopulaSims[int(self.groups[gg][0]) - 1][getInds[0], 0]
-                    tempPC2s = self.gevCopulaSims[int(self.groups[gg][0]) - 1][getInds[0], 1]
-                    tempPC1[c:c + len(self.groups[gg])] = tempPC1s
-                    tempPC2[c:c + len(self.groups[gg])] = tempPC2s
-                    c = c + len(self.groups[gg])
-                self.rmm1Sims.append(tempPC1)
-                self.rmm2Sims.append(tempPC2)
-            self.mjoHistoricalSimRmm1 = self.rmm1Sims
-            self.mjoHistoricalSimRmm2 = self.rmm2Sims
 
         if futureSimNum > 0:
             futureSims = []
@@ -1070,22 +1041,22 @@ class weatherTypes():
                 # ALR FUTURE model simulations
                 sim_years = 100
                 # start simulation at PCs available data
-                d1 = datetime(2023, 6, 1)  # x2d(xds_cov_fit.time[0])
-                d2 = datetime(2123, 6, 1)  # datetime(d1.year+sim_years, d1.month, d1.day)
+                d1 = datetime(2024, 6, 1)  # x2d(xds_cov_fit.time[0])
+                d2 = datetime(2124, 6, 1)  # datetime(d1.year+sim_years, d1.month, d1.day)
                 self.future_dates_sim = [d1 + timedelta(days=i) for i in range((d2 - d1).days + 1)]
 
-                d1 = datetime(2023, 6, 1)
-                dt = datetime(2023, 6, 1)
-                end = datetime(2123, 6, 1)
+                d1 = datetime(2024, 6, 1)
+                dt = datetime(2024, 6, 1)
+                end = datetime(2124, 6, 1)
                 step = relativedelta(years=1)
                 simAnnualTime = []
                 while dt < end:
                     simAnnualTime.append(dt)
                     dt += step
 
-                d1 = datetime(2023, 6, 1)
-                dt = datetime(2023, 6, 1)
-                end = datetime(2123, 6, 2)
+                d1 = datetime(2024, 6, 1)
+                dt = datetime(2024, 6, 1)
+                end = datetime(2124, 6, 2)
                 # step = datetime.timedelta(months=1)
                 step = relativedelta(days=1)
                 simDailyTime = []
@@ -1100,10 +1071,10 @@ class weatherTypes():
                 dailyPC2sim = np.ones((len(trainingDates),))
                 dailyPC3sim = np.ones((len(trainingDates),))
 
-                awtBMUsim = self.awtBmusSim[simIndex][0:100]  # [0:len(awt_bmus)]
-                awtPC1sim = self.pc1Sims[simIndex][0:100]  # [0:len(awt_bmus)]
-                awtPC2sim = self.pc2Sims[simIndex][0:100]  # [0:len(awt_bmus)]
-                awtPC3sim = self.pc3Sims[simIndex][0:100]  # [0:len(awt_bmus)]
+                awtBMUsim = climate.awtBmusSim[simIndex][0:100]  # [0:len(awt_bmus)]
+                awtPC1sim = climate.pc1Sims[simIndex][0:100]  # [0:len(awt_bmus)]
+                awtPC2sim = climate.pc2Sims[simIndex][0:100]  # [0:len(awt_bmus)]
+                awtPC3sim = climate.pc3Sims[simIndex][0:100]  # [0:len(awt_bmus)]
                 dailyDatesSWTyear = np.array([r[0] for r in simDailyDatesMatrix])
                 dailyDatesSWTmonth = np.array([r[1] for r in simDailyDatesMatrix])
                 dailyDatesSWTday = np.array([r[2] for r in simDailyDatesMatrix])
@@ -1138,7 +1109,21 @@ class weatherTypes():
                 # reindex annual data to daily data
                 self.xds_PCs_sim = xr_daily(self.xds_PCs_sim)
 
-                d_covars_sim = xcd_daily([self.xds_PCs_sim])
+
+                # MJO: PCs (Generated with copula simulation. Annual data, parse to daily)
+                self.xds_MJO_sim = xr.Dataset(
+                    {
+                        'rmm1': (('time',), climate.mjoFutureSimRmm1[simIndex].flatten()),
+                        'rmm2': (('time',), climate.mjoFutureSimRmm2[simIndex].flatten()),
+                    },
+                    coords={'time': [datetime(r[0], r[1], r[2]) for r in simDailyDatesMatrix]}
+                )
+                # reindex annual data to daily data
+                self.xds_MJO_sim = xr_daily(self.xds_MJO_sim)
+
+
+
+                d_covars_sim = xcd_daily([self.xds_PCs_sim,self.xds_MJO_sim])
 
                 # PCs covar
                 cov_PCs = self.xds_PCs_sim.sel(time=slice(d_covars_sim[0], d_covars_sim[-1]))
@@ -1147,15 +1132,15 @@ class weatherTypes():
                 cov_3 = cov_PCs.PC3.values.reshape(-1, 1)
 
                 # MJO covars
-                # cov_MJO = xds_MJO_fit.sel(time=slice(d_covars_fit[0], d_covars_fit[-1]))
-                # cov_4 = cov_MJO.rmm1.values.reshape(-1, 1)
-                # cov_5 = cov_MJO.rmm2.values.reshape(-1, 1)
+                cov_MJO = self.xds_MJO_sim.sel(time=slice(d_covars_sim[0], d_covars_sim[-1]))
+                cov_4 = cov_MJO.rmm1.values.reshape(-1, 1)
+                cov_5 = cov_MJO.rmm2.values.reshape(-1, 1)
 
                 # join covars and norm.
-                cov_T = np.hstack((cov_1, cov_2, cov_3))
+                cov_T = np.hstack((cov_1, cov_2, cov_3, cov_4, cov_5))
 
                 # generate xarray.Dataset
-                cov_names = ['PC1', 'PC2', 'PC3']
+                cov_names = ['PC1', 'PC2', 'PC3', 'MJO1', 'MJO2']
                 self.xds_cov_sim = xr.Dataset(
                     {
                         'cov_values': (('time', 'cov_names'), cov_T),
@@ -1174,32 +1159,191 @@ class weatherTypes():
 
                 futureSims.append(xds_ALRfuture.evbmus_sims.values)
 
+
             # Save results for matlab plot
             self.futureBmusSim = futureSims
             # evbmus_probcum = xds_ALR.evbmus_probcum.values
             # convert synthetic markovs to PC values
-            # Fill in the Markov chain bmus with RMM vales
-            rmm1Sims = list()
-            rmm2Sims = list()
-            for kk in range(len(self.futureBmusSim)):
-                tempSimulation = self.futureBmusSim[kk]
-                tempPC1 = np.nan * np.ones((np.shape(tempSimulation)))
-                tempPC2 = np.nan * np.ones((np.shape(tempSimulation)))
 
-                groups = [list(j) for i, j in groupby(tempSimulation)]
-                c = 0
-                for gg in range(len(groups)):
-                    getInds = rm.sample(range(1, 100000), len(groups[gg]))
-                    tempPC1s = self.gevCopulaSims[int(groups[gg][0] - 1)][getInds[0], 0]
-                    tempPC2s = self.gevCopulaSims[int(groups[gg][0] - 1)][getInds[0], 1]
-                    tempPC1[c:c + len(groups[gg])] = tempPC1s
-                    tempPC2[c:c + len(groups[gg])] = tempPC2s
-                    c = c + len(groups[gg])
-                rmm1Sims.append(tempPC1)
-                rmm2Sims.append(tempPC2)
-            self.mjoFutureSimRmm1 = rmm1Sims
-            self.mjoFutureSimRmm2 = rmm2Sims
 
+
+
+
+            import itertools
+            import operator
+            from datetime import timedelta
+            import random
+
+            dt = datetime(1979, 6, 1)
+            end = datetime(2024, 6, 1)
+            step = timedelta(days=1)
+            midnightTime = []
+            while dt < end:
+                midnightTime.append(dt)  # .strftime('%Y-%m-%d'))
+                dt += step
+
+            groupedList = list()
+            groupLengthList = list()
+            bmuGroupList = list()
+            timeGroupList = list()
+            for hh in range(historicalSimNum):
+                print('breaking up hydrogrpahs for historical sim {}'.format(hh))
+                bmusTemp = self.historicalBmusSim[:,hh]
+                tempBmusGroup = [[e[0] for e in d[1]] for d in
+                                 itertools.groupby(enumerate(bmusTemp), key=operator.itemgetter(1))]
+                groupedList.append(tempBmusGroup)
+                groupLengthList.append(np.asarray([len(i) for i in tempBmusGroup]))
+                bmuGroupList.append(np.asarray([bmusTemp[i[0]] for i in tempBmusGroup]))
+                timeGroupList.append([np.asarray(midnightTime)[i] for i in tempBmusGroup])
+
+            simBmuChopped = []
+            simBmuLengthChopped = []
+            simBmuGroupsChopped = []
+            for pp in range(historicalSimNum):
+
+                print('working on historical realization #{}'.format(pp))
+                bmuGroup = bmuGroupList[pp]
+                groupLength = groupLengthList[pp]
+                grouped = groupedList[pp]
+                simGroupLength = []
+                simGrouped = []
+                simBmu = []
+                for i in range(len(groupLength)):
+                    # if np.remainder(i,10000) == 0:
+                    #     print('done with {} hydrographs'.format(i))
+                    tempGrouped = grouped[i]
+                    tempBmu = int(bmuGroup[i])
+                    remainingDays = groupLength[i] - 5
+                    if groupLength[i] < 5:
+                        simGroupLength.append(int(groupLength[i]))
+                        simGrouped.append(grouped[i])
+                        simBmu.append(tempBmu)
+                    else:
+                        counter = 0
+                        while (len(grouped[i]) - counter) > 5:
+                            # print('we are in the loop with remainingDays = {}'.format(remainingDays))
+                            # random days between 3 and 5
+                            randLength = random.randint(1, 3) + 2
+                            # add this to the record
+                            simGroupLength.append(int(randLength))
+                            # simGrouped.append(tempGrouped[0:randLength])
+                            # print('should be adding {}'.format(grouped[i][counter:counter+randLength]))
+                            simGrouped.append(grouped[i][counter:counter + randLength])
+                            simBmu.append(tempBmu)
+                            # remove those from the next step
+                            # tempGrouped = np.delete(tempGrouped,np.arange(0,randLength))
+                            # do we continue forward
+                            remainingDays = remainingDays - randLength
+                            counter = counter + randLength
+
+                        if (len(grouped[i]) - counter) > 0:
+                            simGroupLength.append(int((len(grouped[i]) - counter)))
+                            # simGrouped.append(tempGrouped[0:])
+                            simGrouped.append(grouped[i][counter:])
+                            simBmu.append(tempBmu)
+                simBmuLengthChopped.append(np.asarray(simGroupLength))
+                simBmuGroupsChopped.append(simGrouped)
+                simBmuChopped.append(np.asarray(simBmu))
+
+            self.simHistBmuLengthCopped = simBmuLengthChopped
+            self.simHistBmuGroupsChopped = simBmuGroupsChopped
+            self.simHistBmuChopped = simBmuChopped
+
+
+            dt = datetime(2024, 6, 1)
+            end = datetime(2124, 6, 2)
+            step = timedelta(days=1)
+            midnightTime = []
+            while dt < end:
+                midnightTime.append(dt)  # .strftime('%Y-%m-%d'))
+                dt += step
+
+            groupedList = list()
+            groupLengthList = list()
+            bmuGroupList = list()
+            timeGroupList = list()
+            for hh in range(futureSimNum):
+                print('breaking up hydrogrpahs for future sim {}'.format(hh))
+                bmusTemp = self.futureBmusSim[hh].flatten()
+                tempBmusGroup = [[e[0] for e in d[1]] for d in
+                                 itertools.groupby(enumerate(bmusTemp), key=operator.itemgetter(1))]
+                groupedList.append(tempBmusGroup)
+                groupLengthList.append(np.asarray([len(i) for i in tempBmusGroup]))
+                bmuGroupList.append(np.asarray([bmusTemp[i[0]] for i in tempBmusGroup]))
+                timeGroupList.append([np.asarray(midnightTime)[i] for i in tempBmusGroup])
+
+            simBmuChopped = []
+            simBmuLengthChopped = []
+            simBmuGroupsChopped = []
+            for pp in range(futureSimNum):
+
+                print('working on future realization #{}'.format(pp))
+                bmuGroup = bmuGroupList[pp]
+                groupLength = groupLengthList[pp]
+                grouped = groupedList[pp]
+                simGroupLength = []
+                simGrouped = []
+                simBmu = []
+                for i in range(len(groupLength)):
+                    # if np.remainder(i,10000) == 0:
+                    #     print('done with {} hydrographs'.format(i))
+                    tempGrouped = grouped[i]
+                    tempBmu = int(bmuGroup[i])
+                    remainingDays = groupLength[i] - 5
+                    if groupLength[i] < 5:
+                        simGroupLength.append(int(groupLength[i]))
+                        simGrouped.append(grouped[i])
+                        simBmu.append(tempBmu)
+                    else:
+                        counter = 0
+                        while (len(grouped[i]) - counter) > 5:
+                            # print('we are in the loop with remainingDays = {}'.format(remainingDays))
+                            # random days between 3 and 5
+                            randLength = random.randint(1, 3) + 2
+                            # add this to the record
+                            simGroupLength.append(int(randLength))
+                            # simGrouped.append(tempGrouped[0:randLength])
+                            # print('should be adding {}'.format(grouped[i][counter:counter+randLength]))
+                            simGrouped.append(grouped[i][counter:counter + randLength])
+                            simBmu.append(tempBmu)
+                            # remove those from the next step
+                            # tempGrouped = np.delete(tempGrouped,np.arange(0,randLength))
+                            # do we continue forward
+                            remainingDays = remainingDays - randLength
+                            counter = counter + randLength
+
+                        if (len(grouped[i]) - counter) > 0:
+                            simGroupLength.append(int((len(grouped[i]) - counter)))
+                            # simGrouped.append(tempGrouped[0:])
+                            simGrouped.append(grouped[i][counter:])
+                            simBmu.append(tempBmu)
+                simBmuLengthChopped.append(np.asarray(simGroupLength))
+                simBmuGroupsChopped.append(simGrouped)
+                simBmuChopped.append(np.asarray(simBmu))
+
+            self.simFutureBmuLengthChopped = simBmuLengthChopped
+            self.simFutureBmuGroupsChopped = simBmuGroupsChopped
+            self.simFutureBmuChopped = simBmuChopped
+
+
+
+
+            import pickle
+            samplesPickle = 'simDwts.pickle'
+            outputSamples = {}
+            outputSamples['futureBmusSim'] = self.futureBmusSim
+            outputSamples['futureDatesSim'] = self.futureDatesSim
+            outputSamples['historicalDatesSim'] = self.historicalDatesSim
+            outputSamples['historicalBmusSim'] = self.historicalBmusSim
+            outputSamples['simHistBmuLengthCopped'] = self.simHistBmuLengthCopped
+            outputSamples['simHistBmuGroupsChopped'] = self.simHistBmuGroupsChopped
+            outputSamples['simHistBmuChopped'] = self.simHistBmuChopped
+            outputSamples['simFutureBmuLengthCopped'] = self.simFutureBmuLengthCopped
+            outputSamples['simFutureBmuGroupsChopped'] = self.simFutureBmuGroupsChopped
+            outputSamples['simFutureBmuChopped'] = self.simFutureBmuChopped
+
+            with open(samplesPickle, 'wb') as f:
+                pickle.dump(outputSamples, f)
 
     def separateHistoricalHydrographs(self,metOcean,numRealizations=100,shoreNorm=90):
         import itertools
@@ -1547,7 +1691,7 @@ class weatherTypes():
                 data = temporCopula[~np.isnan(dataHs)]
                 data2 = data[~np.isnan(data[:, 0])]
                 if len(data2) == 0:
-                    print('woah, no waves here bub')
+                    print('woah, no waves here')
                     bmuDataNormalized.append(np.vstack((0, 0)).T)
                     bmuDataMin.append([0, 0])
                     bmuDataMax.append([0, 0])
@@ -1606,9 +1750,10 @@ class weatherTypes():
             tempCopula = np.asarray(copulaData[i])
             if len(tempCopula) == 0:
                 # Hsmax, Hsmin, Tpmax, Tpmin, Dmmean, u10max, u10min, v10max, v10min, Ssrmean, T2mmean, Fetch, NTRmean, Sstmean, time, kk
+                # Hsmax, Hsmin, Tpmax, Tpmin, Dmmean, NTRmean, time, kk
+
                 data2 = [
-                    [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan,
-                     np.nan]]
+                    [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan]]
                 data = data2
             else:
                 dataHs = np.array([sub[0] for sub in copulaData[i]])
@@ -1651,3 +1796,340 @@ class weatherTypes():
                 samples5 = samples5[toobig]
 
             gevCopulaSims.append(samples5)
+        self.gevCopulaSims = gevCopulaSims
+
+
+
+    def simsFutureInterpolated(self,simNum):
+        import numpy as np
+        from datetime import datetime, date, timedelta
+        import random
+        from scipy.spatial import distance
+        import pickle
+        import calendar
+        import pandas
+        dt = datetime(2024, 6, 1, 0, 0, 0)
+        end = datetime(2124, 5, 31, 23, 0, 0)
+        step = timedelta(hours=1)
+        hourlyTime = []
+        while dt < end:
+            hourlyTime.append(dt)  # .strftime('%Y-%m-%d'))
+            dt += step
+
+        deltaT = [(tt - hourlyTime[0]).total_seconds() / (3600 * 24) for tt in hourlyTime]
+
+        def closest_node(node, nodes):
+            closest_index = distance.cdist([node], nodes).argmin()
+            return nodes[closest_index], closest_index
+
+        simulationsHs = list()
+        simulationsTp = list()
+        simulationsDm = list()
+        simulationsSs = list()
+        simulationsTime = list()
+        simulationsWind = list()
+        simulationsWindDir = list()
+        # plus = 900
+
+        for simNum in range(simNum):
+            simHs = []
+            simTp = []
+            simDm = []
+            simSs = []
+            simTime = []
+            simWLTime = []
+            simWind = []
+            simWindDir = []
+            print('filling in simulation #{}'.format(simNum))
+
+            for i in range(len(self.simFutureBmuChopped[simNum])):
+                if np.remainder(i, 1000) == 0:
+                    print('done with {} hydrographs'.format(i))
+                tempBmu = int(self.simFutureBmuChopped[simNum][i] - 1)
+                randStorm = random.randint(0, 9999)
+                stormDetails = self.gevCopulaSims[tempBmu][randStorm]
+                if stormDetails[0] > 8:
+                    print('oh boy, we''ve picked a {}m/s storm wave in BMU #{}'.format(stormDetails[6], tempBmu))
+                    tempBmu = int(self.simFutureBmuChopped[simNum][i] - 1)
+                    randStorm = random.randint(0, 9999)
+                    stormDetails = self.gevCopulaSims[tempBmu][randStorm]
+                #     stormDets1 = stormDetails
+                #     if stormDetails[6] > 55:
+                #         print('oh boy, we''ve picked a {}m/s storm wave in BMU #{} again!'.format(stormDetails[6],
+                #                                                                                   tempBmu))
+                #         tempBmu = int(self.simFutureBmuChopped[simNum][i] - 1)
+                #         randStorm = random.randint(0, 9999)
+                #         stormDetails = self.gevCopulaSims[tempBmu][randStorm]
+                #         stormDets2 = stormDetails
+                #         if stormDetails[6] > 55:
+                #             print('oh boy, we''ve picked a {}m/s storm wave in BMU #{} a third time!'.format(
+                #                 stormDetails[6], tempBmu))
+                #             stormDetails[6] = 55
+                #             stormDetails[7] = 25
+
+                durSim = self.simFutureBmuLengthCopped[simNum][i]
+                # durSim = self.simFutureBmuLengthChopped[simNum][i]
+
+                simDmNorm = (stormDetails[4] - np.asarray(self.bmuDataMin)[tempBmu, 0]) / (
+                            np.asarray(self.bmuDataMax)[tempBmu, 0] - np.asarray(self.bmuDataMin)[tempBmu, 0])
+                simSsNorm = (stormDetails[5] - np.asarray(self.bmuDataMin)[tempBmu, 1]) / (
+                            np.asarray(self.bmuDataMax)[tempBmu, 1] - np.asarray(self.bmuDataMin)[tempBmu, 1])
+                test, closeIndex = closest_node([simDmNorm, simSsNorm], np.asarray(self.bmuDataNormalized)[tempBmu])
+                actualIndex = int(np.asarray(self.copulaData[tempBmu])[closeIndex, 7])
+
+                tempHs = ((self.normalizedHydros[tempBmu][actualIndex]['hsNorm']) * (stormDetails[0] - stormDetails[1]) +
+                          stormDetails[1]).filled()
+                tempTp = ((self.normalizedHydros[tempBmu][actualIndex]['tpNorm']) * (stormDetails[2] - stormDetails[3]) +
+                          stormDetails[3]).filled()
+                # tempWind = ((self.normalizedHydros[tempBmu][actualIndex]['wNorm']) * (stormDetails[6] - stormDetails[7]) +
+                #             stormDetails[7]).filled()
+                # tempWindDir = ((self.normalizedHydros[tempBmu][actualIndex]['wdNorm']) + stormDetails[8])
+
+                tempDm = ((self.normalizedHydros[tempBmu][actualIndex]['dmNorm']) + stormDetails[4])
+                tempSs = ((self.normalizedHydros[tempBmu][actualIndex]['ntrNorm']) + stormDetails[5])
+
+                tempWLtime = np.arange(0,durSim,durSim/len(tempSs))
+
+                if len(self.normalizedHydros[tempBmu][actualIndex]['hsNorm']) < len(
+                        self.normalizedHydros[tempBmu][actualIndex]['timeNorm']):
+                    print('Time is shorter than Hs in bmu {}, index {}'.format(tempBmu, actualIndex))
+                if stormDetails[1] < 0:
+                    print('woah, we''re less than 0 over here')
+                    asdfg
+                # if len(tempSs) < len(self.normalizedHydros[tempBmu][actualIndex]['timeNorm']):
+                #     # print('Ss is shorter than Time in bmu {}, index {}'.format(tempBmu,actualIndex))
+                #     tempLength = len(self.normalizedHydros[tempBmu][actualIndex]['timeNorm'])
+                #     tempSs = np.zeros((len(self.normalizedHydros[tempBmu][actualIndex]['timeNorm']),))
+                #     tempSs[0:len((self.normalizedHydros[tempBmu][actualIndex]['ntrNorm']) + stormDetails[5])] = (
+                #                 (self.normalizedHydros[tempBmu][actualIndex]['ntrNorm']) + stormDetails[5])
+
+                # if len(tempSs) > len(self.normalizedHydros[tempBmu][actualIndex]['timeNorm']):
+                    # print('Now Ss is longer than Time in bmu {}, index {}'.format(tempBmu,actualIndex))
+                    # print('{} vs. {}'.format(len(tempSs),len(normalizedHydros[tempBmu][actualIndex]['timeNorm'])))
+                    # tempSs = tempSs[0:-1]
+                if len(tempSs) > len(tempWLtime):
+                    # print('Now Ss is longer than WL Time in bmu {}, index {}'.format(tempBmu, actualIndex))
+                    # print('Now Ss is longer than WL Time: {} vs {}'.format(len(tempSs), len(tempWLtime)))
+                    tempSs = tempSs[0:-1]
+                if len(tempSs) < len(tempWLtime):
+                    # print('Now Ss is longer than WL Time in bmu {}, index {}'.format(tempBmu, actualIndex))
+                    # print('Now Ss is shorter than WL Time: {} vs {}'.format(len(tempSs), len(tempWLtime)))
+                    tempWLtime = tempWLtime[0:-1]
+
+
+                simHs.append(tempHs)
+                simTp.append(tempTp)
+                simDm.append(tempDm)
+                simSs.append(tempSs)
+                # simWind.append(tempWind)
+                # simWindDir.append(tempWindDir)
+                # simTime.append(normalizedHydros[tempBmu][actualIndex]['timeNorm']*durSim)
+                # dt = np.diff(normalizedHydros[tempBmu][actualIndex]['timeNorm']*durSim)
+                simTime.append(np.hstack((np.diff(self.normalizedHydros[tempBmu][actualIndex]['timeNorm'] * durSim),
+                                          np.diff(self.normalizedHydros[tempBmu][actualIndex]['timeNorm'] * durSim)[-1])))
+                simWLTime.append(np.hstack((np.diff(tempWLtime),np.diff(tempWLtime)[-1])))
+
+
+
+            cumulativeHours = np.cumsum(np.hstack(simTime))
+            newDailyTime = [datetime(2024, 6, 1) + timedelta(days=ii) for ii in cumulativeHours]
+            simDeltaT = [(tt - newDailyTime[0]).total_seconds() / (3600 * 24) for tt in newDailyTime]
+
+            # Just for water levels at different time interval
+            cumulativeWLHours = np.cumsum(np.hstack(simWLTime))
+            newDailyWLTime = [datetime(2024, 6, 1) + timedelta(days=ii) for ii in cumulativeWLHours]
+            simDeltaWLT = [(tt - newDailyWLTime[0]).total_seconds() / (3600 * 24) for tt in newDailyWLTime]
+
+            print('water level time vs. surge: {} vs {}'.format(len(np.hstack(simSs)),len(simDeltaWLT)))
+
+            # simData = np.array(
+            #     np.vstack((np.hstack(simHs).T, np.hstack(simTp).T, np.hstack(simDm).T, np.hstack(simSs).T)))
+            # # simData = np.array((np.ma.asarray(np.hstack(simHs)),np.ma.asarray(np.hstack(simTp)),np.ma.asarray(np.hstack(simDm)),np.ma.asarray(np.hstack(simSs))))
+            # # simData = np.array([np.hstack(simHs).filled(),np.hstack(simTp).filled(),np.hstack(simDm).filled(),np.hstack(simSs)])
+            #
+            # ogdf = pandas.DataFrame(data=simData.T, index=newDailyTime, columns=["hs", "tp", "dm", "ss"])
+
+            print('interpolating')
+            interpHs = np.interp(deltaT, simDeltaT, np.hstack(simHs))
+            interpTp = np.interp(deltaT, simDeltaT, np.hstack(simTp))
+            interpDm = np.interp(deltaT, simDeltaT, np.hstack(simDm))
+            # interpWind = np.interp(deltaT, simDeltaT, np.hstack(simWind))
+            # interpWindDir = np.interp(deltaT, simDeltaT, np.hstack(simWindDir))
+            interpSs = np.interp(deltaT, simDeltaWLT, np.hstack(simSs))
+
+            simDataInterp = np.array([interpHs, interpTp, interpDm, interpSs])#, interpWind, interpWindDir])
+
+            df = pandas.DataFrame(data=simDataInterp.T, index=hourlyTime, columns=["hs", "tp", "dm", "ss"])
+            # df = pandas.DataFrame(data=simDataInterp.T, index=hourlyTime, columns=["hs", "tp", "dm", "ss", "w", "wd"])
+
+            # resampled = df.resample('H')
+            # interped = resampled.interpolate()
+            # simulationData = interped.values
+            # testTime = interped.index  # to_pydatetime()
+            # testTime2 = testTime.to_pydatetime()
+
+            # simsPickle = ('/home/dylananderson/projects/atlanticClimate/Sims/simulation{}.pickle'.format(simNum))
+            # simsPickle = ('/media/dylananderson/Elements/Sims/simulation{}.pickle'.format(simNum))
+            simsPickle = (
+                '/volumes/anderson/vaSims/futureSims{}.pickle'.format(simNum))
+
+            outputSims = {}
+            outputSims['simulationData'] = simDataInterp.T
+            outputSims['df'] = df
+            outputSims['simHs'] = np.hstack(simHs)
+            outputSims['simTp'] = np.hstack(simTp)
+            outputSims['simDm'] = np.hstack(simDm)
+            outputSims['simSs'] = np.hstack(simSs)
+            # outputSims['simWind'] = np.hstack(simWind)
+            # outputSims['simWindDir'] = np.hstack(simWindDir)
+
+            outputSims['time'] = hourlyTime
+
+            with open(simsPickle, 'wb') as f:
+                pickle.dump(outputSims, f)
+
+
+
+
+    def simsFutureValidated(self,met):
+        import numpy as np
+        from datetime import datetime, date, timedelta
+        import random
+        import pandas as pd
+        from functions import return_value
+        import matplotlib.pyplot as plt
+        from dateutil.relativedelta import relativedelta
+
+        tC = met.timeWave
+        data = np.array([met.Hs, met.Tp, met.Dm])
+        ogdf = pd.DataFrame(data=data.T, index=tC, columns=["hs", "tp", "dm"])
+        year = np.array([tt.year for tt in tC])
+        ogdf['year'] = year
+        month = np.array([tt.month for tt in tC])
+        ogdf['month'] = month
+
+        dailyMaxHs = ogdf.resample("d")['hs'].max()
+        seasonalMean = ogdf.groupby('month').mean()
+        seasonalStd = ogdf.groupby('month').std()
+        yearlyMax = ogdf.groupby('year').max()
+
+        c = 0
+        fourDayMax = []
+        while c < len(met.Hs):
+            fourDayMax.append(np.nanmax(met.Hs[c:c + 96]))
+            c = c + 96
+        fourDayMaxHs = np.asarray(fourDayMax)
+
+        simSeasonalMean = np.nan * np.ones((10, 12))
+        simSeasonalStd = np.nan * np.ones((10, 12))
+        simYearlyMax = np.nan * np.ones((10, 101))
+
+        yearArray = []
+        zNArray = []
+        ciArray = []
+        for hh in range(10):
+
+            file = r"/Volumes/anderson/vaSims/futureSims{}.pickle".format(hh)
+
+            with open(file, "rb") as input_file:
+                # simsInput = pickle.load(input_file)
+                simsInput = pd.read_pickle(input_file)
+            simulationData = simsInput['simulationData']
+            df = simsInput['df']
+            time = simsInput['time']
+            year = np.array([tt.year for tt in time])
+            df['year'] = year
+            month = np.array([tt.month for tt in time])
+            df['month'] = month
+
+            g1 = df.groupby(pd.Grouper(freq="M")).mean()
+            simSeasonalMean[hh, :] = df.groupby('month').mean()["hs"]
+            simSeasonalStd[hh, :] = df.groupby('month').std()["hs"]
+            simYearlyMax[hh, :] = df.groupby('year').max()["hs"]
+            dailyMaxHsSim = df.resample("d")["hs"].max()
+
+            fourtyTwoYears = 42*365.25*24
+            c = 0
+            fourDayMaxSim = []
+            while c < len(simulationData):
+                fourDayMaxSim.append(np.nanmax(simulationData[c:c + 96, 0]))
+                c = c + 96
+            fourDayMaxHsSim = np.asarray(fourDayMaxSim)
+            # print(len(np.asarray(fourDayMaxHsSim)))
+
+            # sim = return_value(np.asarray(fourDayMaxHsSim)[0:365*41], 15, 0.05, 365/4, 36525/4, 'mle')
+            sim = return_value(np.asarray(fourDayMaxHsSim)[0:int(365/4*41)], 3.5, 0.05, 365 / 4, 36525 / 4, 'mle')
+
+            yearArray.append(sim['year_array'])
+            zNArray.append(sim['z_N'])
+            ciArray.append(sim['CI'])
+
+        dt = datetime(2002, 1, 1)
+        end = datetime(2003, 1, 1)
+        # dt = datetime(2022, 1, 1)
+        # end = datetime(2023, 1, 1)
+        step = relativedelta(months=1)
+        plotTime = []
+        while dt < end:
+            plotTime.append(dt)  # .strftime('%Y-%m-%d'))
+            dt += step
+
+        # print(len(np.asarray(fourDayMax)))
+        historical = return_value(np.asarray(fourDayMax), 3.5, 0.05, 365 / 4, 36525 / 4, 'mle')
+        historical2 = return_value(np.asarray(fourDayMaxHsSim), 3, 0.05, 365 / 4, 36525 / 4, 'mle')
+
+
+        var = 'hs'
+        plt.figure()
+        ax1 = plt.subplot2grid((1, 1), (0, 0), rowspan=1, colspan=1)
+        ax1.plot(plotTime, seasonalMean[var], label='WIS record (42 years)')
+        ax1.fill_between(plotTime, seasonalMean[var] - seasonalStd[var], seasonalMean[var] + seasonalStd[var],
+                         color='b', alpha=0.2)
+        ax1.plot(plotTime, df.groupby('month').mean()[var], label='Synthetic record (100 years)')
+        ax1.fill_between(plotTime, df.groupby('month').mean()[var] - df.groupby('month').std()[var],
+                         df.groupby('month').mean()[var] + df.groupby('month').std()[var], color='orange', alpha=0.2)
+        # ax1.fill_between(plotTime, df.groupby('month').mean()[var] - df.groupby('month').percentile()[var],
+        #                  df.groupby('month').mean()[var] + df.groupby('month').std()[var], color='orange', alpha=0.2)
+        # ax1.fill_between(plotTime, simSeasonalMean['hs'] - simSeasonalStd['hs'], simSeasonalMean['hs'] + simSeasonalStd['hs'], color='orange', alpha=0.2)
+        ax1.set_xticks(
+            [plotTime[0], plotTime[1], plotTime[2], plotTime[3], plotTime[4], plotTime[5], plotTime[6], plotTime[7],
+             plotTime[8], plotTime[9], plotTime[10], plotTime[11]])
+        ax1.set_xticklabels(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'])
+        ax1.legend()
+        ax1.set_ylabel('hs (m)')
+        ax1.set_title('Seasonal wave variability')
+
+        import matplotlib.cm as cm
+        import matplotlib.colors as mcolors
+
+        # plt.style.use('dark_background')
+
+        # to do order this by uncertainty
+        plt.figure(8)
+        colorparam = np.zeros((len(zNArray),))
+        for qq in range(len(zNArray)):
+            normalize = mcolors.Normalize(vmin=0, vmax=5)
+            colorparam[qq] = ciArray[qq]
+            colormap = cm.Greys_r
+            color = colormap(normalize(colorparam[qq]))
+            plt.plot(yearArray[qq], zNArray[qq], color=color, alpha=0.75)  # color=[0.5,0.5,0.5],alpha=0.5)
+
+        plt.plot(historical['year_array'], historical['CI_z_N_high_year'], linestyle='--', color='red', alpha=0.8,
+                 lw=0.9, label='Confidence Bands')
+        plt.plot(historical['year_array'], historical['CI_z_N_low_year'], linestyle='--', color='red', alpha=0.8,
+                 lw=0.9)
+        plt.plot(historical['year_array'], historical['z_N'], color='orange', label='Theoretical Return Level')
+        plt.scatter(historical['N'], historical['sample_over_thresh'], color='orange', label='Empirical Return Level',
+                    zorder=10)
+        # plt.plot(historical2['year_array'], historical2['z_N'], color='black', label='Theoretical Return Level')
+        # plt.scatter(historical2['N'], historical2['sample_over_thresh'][0:-1], color='orange', label='Empirical Return Level',
+        #             zorder=10)
+        plt.xscale('log')
+        plt.xlabel('Return Period (years)')
+        plt.ylabel('Return Level (m)')
+        plt.title('Return Level Plot (Wave Height)')
+        plt.legend()
+
+        plt.show()
+
+

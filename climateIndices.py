@@ -27,13 +27,13 @@ class climateIndices():
     def __init__(self, **kwargs):
 
         self.awtStart = kwargs.get('awtStart', 1880)
-        self.awtEnd = kwargs.get('awtEnd',2023)
+        self.awtEnd = kwargs.get('awtEnd',2024)
         self.ersstFolder = kwargs.get('ersstFolder', "/users/dylananderson/Documents/data/ERSSTv5/")
         self.latTop = kwargs.get('latTop', 50)
         self.resolution = kwargs.get('resolution',1)
         self.avgTime = kwargs.get('avgTime',24)
         self.startTime = kwargs.get('startTime',[1979,1,1])
-        self.endTime = kwargs.get('endTime',[2022,12,31])
+        self.endTime = kwargs.get('endTime',[2024,5,31])
         self.slpMemory = kwargs.get('slpMemory',False)
         self.slpPath = kwargs.get('slpPath')
         self.lonLeft = kwargs.get('lonLeft', 280)

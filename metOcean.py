@@ -805,6 +805,55 @@ class getMetOcean():
 
 
 
+    def getERA5Bathymetry(self,printToScreen=False):
+        from datetime import datetime, date
+        from dateutil.relativedelta import relativedelta
+
+
+        print('Extracting bathy')
+
+        extractTime = date(self.startTime[0], self.startTime[1], self.startTime[2])
+
+        import cdsapi
+        import xarray as xr
+        from urllib.request import urlopen
+
+        if printToScreen == True:
+            print('{}-{}'.format(extractTime.year, extractTime.month))
+        # start the client
+        cds = cdsapi.Client()
+        # dataset you want to read
+        dataset = 'reanalysis-era5-single-levels'
+        # flag to download data
+        download_flag = False
+        # api parameters
+        params = {
+            "format": "netcdf",
+            "product_type": "reanalysis",
+            "variable": ['model_bathymetry'],
+            'year': [str(extractTime.year)],
+            'month': [str(extractTime.month), ],
+            'day': ['01'],
+            "time": ['00:00'],
+            "area": [self.latTop, self.lonLeft, self.latBot, self.lonRight],
+        }
+        # retrieves the path to the file
+        fl = cds.retrieve(dataset, params)
+        # download the file
+        if download_flag:
+            fl.download("./output.nc")
+        # load into memory
+        with urlopen(fl.location) as f:
+            ds = xr.open_dataset(f.read())
+
+        m, n, p = np.shape(ds.wmb)
+        WMB = np.zeros((n * p, m))
+
+        for mmm in range(m):
+            WMB[:,mmm] = ds.wmb[mmm, :, :].values.flatten()
+
+        self.wmb = WMB.flatten()
+
 
     def getYearlyERA5WavesAndWindsAndTemps(self,printToScreen=False):
         from datetime import datetime, date

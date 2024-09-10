@@ -639,6 +639,97 @@ def npdt64todatetime(dt64):
 
 
 
+def return_value(sample_real, threshold, alpha, block_size, return_period,
+                 fit_method):  # return value plot and return value estimative
+    from rpy2.robjects.packages import importr
+    from rpy2.robjects.vectors import FloatVector
+    import math as mt
+    from scipy.stats import norm
+
+    POT = importr('POT')  # importing POT package
+    sample = np.sort(sample_real)
+    sample_excess = []
+    sample_over_thresh = []
+    for data in sample:
+      if data > threshold + 0.00001:
+         sample_excess.append(data - threshold)
+         sample_over_thresh.append(data)
+
+    rdata = FloatVector(sample)
+    fit = POT.fitgpd(rdata, threshold, est=fit_method)  # fit data
+    shape = fit[0][1]
+    scale = fit[0][0]
+
+    # Computing the return value for a given return period with the confidence interval estimated by the Delta Method
+    m = return_period
+    Eu = len(sample_over_thresh) / len(sample)
+    x_m = threshold + (scale / shape) * (((m * Eu) ** shape) - 1)
+
+    # Solving the delta method
+    d = Eu * (1 - Eu) / len(sample)
+    e = fit[3][0]
+    f = fit[3][1]
+    g = fit[3][2]
+    h = fit[3][3]
+    a = (scale * (m ** shape)) * (Eu ** (shape - 1))
+    b = (shape ** -1) * (((m * Eu) ** shape) - 1)
+    c = (-scale * (shape ** -2)) * ((m * Eu) ** shape - 1) + (scale * (shape ** -1)) * ((m * Eu) ** shape) * mt.log(
+      m * Eu)
+    CI = (norm.ppf(1 - (alpha / 2)) * ((((a ** 2) * d) + (b * ((c * g) + (e * b))) + (c * ((b * f) + (c * h)))) ** 0.5))
+
+    print('The return value for the given return period is {} \u00B1 {}'.format(x_m, CI))
+
+    ny = block_size  # defining how much observations will be a block (usually anual)
+    N_year = return_period / block_size  # N_year represents the number of years based on the given return_period
+
+    for i in range(0, len(sample)):
+      if sample[i] > threshold + 0.0001:
+         i_initial = i
+         break
+
+    p = np.arange(i_initial, len(sample)) / (len(sample))  # Getting Plotting Position points
+    N = 1 / (ny * (1 - p))  # transforming plotting position points to years
+
+    year_array = np.arange(min(N), N_year + 0.1, 0.1)  # defining a year array
+
+    # Algorithm to compute the return value and the confidence intervals for plotting
+    z_N = []
+    CI_z_N_high_year = []
+    CI_z_N_low_year = []
+    for year in year_array:
+      z_N.append(threshold + (scale / shape) * (((year * ny * Eu) ** shape) - 1))
+      a = (scale * ((year * ny) ** shape)) * (Eu ** (shape - 1))
+      b = (shape ** -1) * ((((year * ny) * Eu) ** shape) - 1)
+      c = (-scale * (shape ** -2)) * (((year * ny) * Eu) ** shape - 1) + (scale * (shape ** -1)) * (
+                 ((year * ny) * Eu) ** shape) * mt.log((year * ny) * Eu)
+      CIyear = (norm.ppf(1 - (alpha / 2)) * (
+                 (((a ** 2) * d) + (b * ((c * g) + (e * b))) + (c * ((b * f) + (c * h)))) ** 0.5))
+      CI_z_N_high_year.append(threshold + (scale / shape) * (((year * ny * Eu) ** shape) - 1) + CIyear)
+      CI_z_N_low_year.append(threshold + (scale / shape) * (((year * ny * Eu) ** shape) - 1) - CIyear)
+
+    # Plotting Return Value
+    # plt.figure(8)
+    # plt.plot(year_array, CI_z_N_high_year, linestyle='--', color='red', alpha=0.8, lw=0.9, label='Confidence Bands')
+    # plt.plot(year_array, CI_z_N_low_year, linestyle='--', color='red', alpha=0.8, lw=0.9)
+    # plt.plot(year_array, z_N, color='black', label='Theoretical Return Level')
+    # plt.scatter(N, sample_over_thresh, label='Empirical Return Level')
+    # plt.xscale('log')
+    # plt.xlabel('Return Period')
+    # plt.ylabel('Return Level')
+    # plt.title('Return Level Plot')
+    # plt.legend()
+    #
+    # plt.show()
+
+    output = dict()
+    output['year_array'] = year_array
+    output['N'] = N
+    output['sample_over_thresh'] = sample_over_thresh
+    output['CI_z_N_high_year'] = CI_z_N_high_year
+    output['CI_z_N_low_year'] = CI_z_N_low_year
+    output['z_N'] = z_N
+    output['CI'] = CI
+    return output
 
 
 
