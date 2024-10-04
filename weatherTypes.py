@@ -13,16 +13,18 @@ class weatherTypes():
 
     def __init__(self, **kwargs):
 
-        self.lonLeft = kwargs.get('lonLeft', 275)
+        self.lonLeft = kwargs.get('lonLeft', 270)
         self.lonRight = kwargs.get('lonRight',350)
         self.latBot = kwargs.get('latBot', 15)
-        self.latTop = kwargs.get('latTop', 50)
+        self.latTop = kwargs.get('latTop', 55)
         self.resolution = kwargs.get('resolution',1)
         self.avgTime = kwargs.get('avgTime',24)
         self.startTime = kwargs.get('startTime',[1979,1,1])
-        self.endTime = kwargs.get('endTime',[2020,12,31])
+        self.endTime = kwargs.get('endTime',[2024,5,31])
         self.slpMemory = kwargs.get('slpMemory',False)
         self.slpPath = kwargs.get('slpPath')
+        self.minGroupSize = kwargs.get('minGroupSize',50)
+        self.savePath = kwargs.get('savePath',os.getcwd())
         # self.lonLeft = kwargs.get('cameraID', 'c1')
         # self.lonRight = kwargs.get('rawPath')
         # self.latBottom = kwargs.get('nFrames', 1)
@@ -612,7 +614,7 @@ class weatherTypes():
         outputSamples['Mx'] = Mx
         outputSamples['My'] = My
 
-        with open(samplesPickle, 'wb') as f:
+        with open(os.path.join(self.savePath,samplesPickle), 'wb') as f:
             pickle.dump(outputSamples, f)
 
     def pcaOfSlps(self):
@@ -663,10 +665,10 @@ class weatherTypes():
         outputSamples['APEV'] = APEV
         outputSamples['nterm'] = nterm
 
-        with open(samplesPickle, 'wb') as f:
+        with open(os.path.join(self.savePath,samplesPickle), 'wb') as f:
             pickle.dump(outputSamples, f)
 
-    def wtClusters(self,numClusters=49,TCs=True,Basin=b'NA'):
+    def wtClusters(self,numClusters=49,TCs=True,Basin=b'NA',RG=None,minGroupSize=50,alphaRG=0.1):
         from functions import sort_cluster_gen_corr_end
         from sklearn.cluster import KMeans
         import numpy as np
@@ -848,49 +850,183 @@ class weatherTypes():
             outputSamples['numClustersTC'] = self.num_clustersTC
             outputSamples['bmus_corrected'] = self.bmus_corrected
 
-            with open(samplesPickle, 'wb') as f:
+            with open(os.path.join(self.savePath,samplesPickle), 'wb') as f:
                 pickle.dump(outputSamples, f)
 
 
 
 
         else:
-            kma = KMeans(n_clusters=numClusters, n_init=2000).fit(PCsub)
-            # groupsize
-            _, group_sizeETC = np.unique(kma.labels_, return_counts=True)
-            # groups
-            d_groupsETC = {}
-            for k in range(numClusters):
-                d_groupsETC['{0}'.format(k)] = np.where(kma.labels_ == k)
-            self.groupSizeETC = group_sizeETC
-            self.dGroupsETC = d_groupsETC
-            # centroids
-            centroids = np.dot(kma.cluster_centers_, EOFsub)
-            # km, x and var_centers
-            km = np.multiply(
-                centroids,
-                np.tile(self.SlpGrdStd, (numClusters, 1))
-            ) + np.tile(self.SlpGrdMean, (numClusters, 1))
-            # sort kmeans
-            kma_order = sort_cluster_gen_corr_end(kma.cluster_centers_, numClusters)
-            self.kmaOrderETC = kma_order
-            bmus_corrected = np.zeros((len(kma.labels_),), ) * np.nan
-            for i in range(numClusters):
-                posc = np.where(kma.labels_ == kma_order[i])
-                bmus_corrected[posc] = i
-            self.bmus_correctedETC = bmus_corrected
-            # reorder centroids
-            self.sorted_cenEOFsETC = kma.cluster_centers_[kma_order, :]
-            self.sorted_centroidsETC = centroids[kma_order, :]
 
-            repmatStd = np.tile(self.SlpGrdStd, (numClusters, 1))
-            repmatMean = np.tile(self.SlpGrdMean, (numClusters, 1))
-            self.Km_ETC = np.multiply(self.sorted_centroidsETC, repmatStd) + repmatMean
+            if RG == 'seasonal':
+                self.minGroupSize=minGroupSize
+
+                dayOfYear = np.array([hh.timetuple().tm_yday for hh in self.DATES])  # returns 1 for January 1st
+                dayOfYearSine = np.sin(2 * np.pi / 366 * dayOfYear)
+                dayOfYearCosine = np.cos(2 * np.pi / 366 * dayOfYear)
+
+                PCsub_std = np.std(PCsub, axis=0)
+                PCsub_norm = np.divide(PCsub, PCsub_std)
+
+                X = PCsub_norm  #  predictor
+
+                wd = np.vstack((dayOfYearSine, dayOfYearCosine)).T
+
+                wd_std = np.nanstd(wd, axis=0)
+                wd_norm = np.divide(wd, wd_std)
+
+                Y = wd_norm  # predictand
+
+                # Adjust
+                [n, d] = Y.shape
+                X = np.concatenate((np.ones((n, 1)), X), axis=1)
+                from sklearn import linear_model
+
+                clf = linear_model.LinearRegression(fit_intercept=True)
+                Ymod = np.zeros((n, d)) * np.nan
+                for i in range(d):
+                    clf.fit(X, Y[:, i])
+                    beta = clf.coef_
+                    intercept = clf.intercept_
+                    Ymod[:, i] = np.ones((n,)) * intercept
+                    for j in range(len(beta)):
+                        Ymod[:, i] = Ymod[:, i] + beta[j] * X[:, j]
+
+                # de-scale
+                Ym = np.multiply(Ymod, wd_std)
+
+                alpha = alphaRG
+                # append Yregres data to PCs
+                data = np.concatenate((PCsub, Ym), axis=1)
+                data_std = np.std(data, axis=0)
+                data_mean = np.mean(data, axis=0)
+
+                #  normalize but keep PCs weigth
+                data_norm = np.ones(data.shape) * np.nan
+                for i in range(PCsub.shape[1]):
+                    data_norm[:, i] = np.divide(data[:, i] - data_mean[i], data_std[0])
+                for i in range(PCsub.shape[1], data.shape[1]):
+                    data_norm[:, i] = np.divide(data[:, i] - data_mean[i], data_std[i])
+
+                # apply alpha (PCs - Yregress weight)
+                data_a = np.concatenate(
+                    ((1 - alpha) * data_norm[:, :self.nterm],
+                     alpha * data_norm[:, self.nterm:]),
+                    axis=1
+                )
+
+                #  KMeans
+                keep_iter = True
+                count_iter = 0
+                while keep_iter:
+                    # n_init: number of times KMeans runs with different centroids seeds
+                    kma = KMeans(n_clusters=self.numClusters, n_init=100).fit(data_a)
+
+                    #  check minimun group_size
+                    group_keys, group_size = np.unique(kma.labels_, return_counts=True)
+
+                    # sort output
+                    group_k_s = np.column_stack([group_keys, group_size])
+                    group_k_s = group_k_s[group_k_s[:, 0].argsort()]  # sort by cluster num
+
+                    if not self.minGroupSize:
+                        keep_iter = False
+
+                    else:
+                        # keep iterating?
+                        keep_iter = np.where(group_k_s[:, 1] < self.minGroupSize)[0].any()
+                        count_iter += 1
+
+                        # log kma iteration
+                        print('KMA iteration info:')
+                        for rr in group_k_s:
+                            print('  cluster: {0}, size: {1}'.format(rr[0], rr[1]))
+                        print('Try again: ', keep_iter)
+                        print('Total attemps: ', count_iter)
+                        print()
+
+
+
+                # groupsize
+                _, group_sizeETC = np.unique(kma.labels_, return_counts=True)
+                # groups
+                d_groupsETC = {}
+                for k in range(numClusters):
+                    d_groupsETC['{0}'.format(k)] = np.where(kma.labels_ == k)
+                self.groupSizeETC = group_sizeETC
+                self.dGroupsETC = d_groupsETC
+                # centroids
+                # centroids = np.dot(kma.cluster_centers_, EOFsub)
+
+                centroids = np.zeros((self.numClusters, EOFsub.shape[1]))  # PCsub.shape[1]))
+                for k in range(self.numClusters):
+                    centroids[k, :] = np.dot(np.mean(PCsub[d_groupsETC['{0}'.format(k)], :], axis=1), EOFsub)
+
+
+                # km, x and var_centers
+                km = np.multiply(
+                    centroids,
+                    np.tile(self.SlpGrdStd, (self.numClusters, 1))
+                ) + np.tile(self.SlpGrdMean, (self.numClusters, 1))
+                # sort kmeans
+                kma_order = sort_cluster_gen_corr_end(kma.cluster_centers_, self.numClusters)
+                self.kmaOrderETC = kma_order
+                bmus_corrected = np.zeros((len(kma.labels_),), ) * np.nan
+                for i in range(self.numClusters):
+                    posc = np.where(kma.labels_ == kma_order[i])
+                    bmus_corrected[posc] = i
+                self.bmus_correctedETC = bmus_corrected
+                # reorder centroids
+                self.sorted_cenEOFsETC = kma.cluster_centers_[kma_order, :]
+                self.sorted_centroidsETC = centroids[kma_order, :]
+
+                repmatStd = np.tile(self.SlpGrdStd, (numClusters, 1))
+                repmatMean = np.tile(self.SlpGrdMean, (numClusters, 1))
+                self.Km_ETC = np.multiply(self.sorted_centroidsETC, repmatStd) + repmatMean
+                self.bmus = self.bmus_correctedETC
+                self.bmus_corrected = self.bmus_correctedETC
+
+
+            else:
+                kma = KMeans(n_clusters=numClusters, n_init=2000).fit(PCsub)
+                # groupsize
+                _, group_sizeETC = np.unique(kma.labels_, return_counts=True)
+                # groups
+                d_groupsETC = {}
+                for k in range(numClusters):
+                    d_groupsETC['{0}'.format(k)] = np.where(kma.labels_ == k)
+                self.groupSizeETC = group_sizeETC
+                self.dGroupsETC = d_groupsETC
+                # centroids
+                centroids = np.dot(kma.cluster_centers_, EOFsub)
+                # km, x and var_centers
+                km = np.multiply(
+                    centroids,
+                    np.tile(self.SlpGrdStd, (numClusters, 1))
+                ) + np.tile(self.SlpGrdMean, (numClusters, 1))
+                # sort kmeans
+                kma_order = sort_cluster_gen_corr_end(kma.cluster_centers_, numClusters)
+                self.kmaOrderETC = kma_order
+                bmus_corrected = np.zeros((len(kma.labels_),), ) * np.nan
+                for i in range(numClusters):
+                    posc = np.where(kma.labels_ == kma_order[i])
+                    bmus_corrected[posc] = i
+                self.bmus_correctedETC = bmus_corrected
+                # reorder centroids
+                self.sorted_cenEOFsETC = kma.cluster_centers_[kma_order, :]
+                self.sorted_centroidsETC = centroids[kma_order, :]
+
+                repmatStd = np.tile(self.SlpGrdStd, (numClusters, 1))
+                repmatMean = np.tile(self.SlpGrdMean, (numClusters, 1))
+                self.Km_ETC = np.multiply(self.sorted_centroidsETC, repmatStd) + repmatMean
+                self.bmus = self.bmus_correctedETC
+
 
             import pickle
             samplesPickle = 'dwts.pickle'
             outputSamples = {}
             outputSamples['Km_ETC'] = self.Km_ETC
+            outputSamples['bmus'] = self.bmus
             outputSamples['sorted_centroidsETC'] = self.sorted_centroidsETC
             outputSamples['sorted_cenEOFsETC'] = self.sorted_cenEOFsETC
             outputSamples['bmus_correctedETC'] = self.bmus_correctedETC
@@ -898,13 +1034,14 @@ class weatherTypes():
             outputSamples['dGroupsETC'] = self.dGroupsETC
             outputSamples['groupSizeETC'] = self.groupSizeETC
             outputSamples['numClustersETC'] = self.numClusters
+            outputSamples['bmus_corrected'] = self.bmus_correctedETC
 
-            with open(samplesPickle, 'wb') as f:
+            with open(os.path.join(self.savePath,samplesPickle), 'wb') as f:
                 pickle.dump(outputSamples, f)
 
 
 
-    def alrSimulations(self,climate,historicalSimNum,futureSimNum,loadPrevious=False,plotOutput=False):
+    def alrSimulations(self,climate,historicalSimNum,futureSimNum,futureSimStart,futureSimEnd,loadPrevious=False,plotOutput=False):
         from functions import xds_reindex_daily as xr_daily
         from functions import xds_common_dates_daily as xcd_daily
         from functions import ALR_WRP
@@ -1036,27 +1173,29 @@ class weatherTypes():
 
 
         if futureSimNum > 0:
+            self.futureSimStart = futureSimStart
+            self.futureSimEnd = futureSimEnd
             futureSims = []
             for simIndex in range(futureSimNum):
                 # ALR FUTURE model simulations
                 sim_years = 100
                 # start simulation at PCs available data
-                d1 = datetime(2024, 6, 1)  # x2d(xds_cov_fit.time[0])
-                d2 = datetime(2124, 6, 1)  # datetime(d1.year+sim_years, d1.month, d1.day)
+                d1 = datetime(self.futureSimStart, 6, 1)  # x2d(xds_cov_fit.time[0])
+                d2 = datetime(self.futureSimEnd, 6, 1)  # datetime(d1.year+sim_years, d1.month, d1.day)
                 self.future_dates_sim = [d1 + timedelta(days=i) for i in range((d2 - d1).days + 1)]
 
-                d1 = datetime(2024, 6, 1)
-                dt = datetime(2024, 6, 1)
-                end = datetime(2124, 6, 1)
+                d1 = datetime(self.futureSimStart, 6, 1)
+                dt = datetime(self.futureSimStart, 6, 1)
+                end = datetime(self.futureSimEnd, 6, 1)
                 step = relativedelta(years=1)
                 simAnnualTime = []
                 while dt < end:
                     simAnnualTime.append(dt)
                     dt += step
 
-                d1 = datetime(2024, 6, 1)
-                dt = datetime(2024, 6, 1)
-                end = datetime(2124, 6, 2)
+                d1 = datetime(self.futureSimStart, 6, 1)
+                dt = datetime(self.futureSimStart, 6, 1)
+                end = datetime(self.futureSimEnd, 6, 2)
                 # step = datetime.timedelta(months=1)
                 step = relativedelta(days=1)
                 simDailyTime = []
@@ -1181,12 +1320,17 @@ class weatherTypes():
             while dt < end:
                 midnightTime.append(dt)  # .strftime('%Y-%m-%d'))
                 dt += step
+            # Import the time library
+            import time
+
 
             groupedList = list()
             groupLengthList = list()
             bmuGroupList = list()
-            timeGroupList = list()
+            # timeGroupList = list()
             for hh in range(historicalSimNum):
+                # Calculate the start time
+                start = time.time()
                 print('breaking up hydrogrpahs for historical sim {}'.format(hh))
                 bmusTemp = self.historicalBmusSim[:,hh]
                 tempBmusGroup = [[e[0] for e in d[1]] for d in
@@ -1194,12 +1338,17 @@ class weatherTypes():
                 groupedList.append(tempBmusGroup)
                 groupLengthList.append(np.asarray([len(i) for i in tempBmusGroup]))
                 bmuGroupList.append(np.asarray([bmusTemp[i[0]] for i in tempBmusGroup]))
-                timeGroupList.append([np.asarray(midnightTime)[i] for i in tempBmusGroup])
+                # timeGroupList.append([np.asarray(midnightTime)[i] for i in tempBmusGroup]) # THIS SLOWS EVERYTHING DOWN 100 FOLD
+                # Calculate the end time and time taken
+                end = time.time()
+                length = end - start
+                print('completed in {} minutes'.format(length/60))
 
             simBmuChopped = []
             simBmuLengthChopped = []
             simBmuGroupsChopped = []
             for pp in range(historicalSimNum):
+                start = time.time()
 
                 print('working on historical realization #{}'.format(pp))
                 bmuGroup = bmuGroupList[pp]
@@ -1244,59 +1393,69 @@ class weatherTypes():
                 simBmuLengthChopped.append(np.asarray(simGroupLength))
                 simBmuGroupsChopped.append(simGrouped)
                 simBmuChopped.append(np.asarray(simBmu))
+                # Calculate the end time and time taken
+                end = time.time()
+                length = end - start
+                print('completed in {} minutes'.format(length/60))
 
-            self.simHistBmuLengthCopped = simBmuLengthChopped
+            self.simHistBmuLengthChopped = simBmuLengthChopped
             self.simHistBmuGroupsChopped = simBmuGroupsChopped
             self.simHistBmuChopped = simBmuChopped
 
 
-            dt = datetime(2024, 6, 1)
-            end = datetime(2124, 6, 2)
+            dt = datetime(self.futureSimStart, 6, 1)
+            end = datetime(self.futureSimEnd, 6, 2)
             step = timedelta(days=1)
             midnightTime = []
             while dt < end:
                 midnightTime.append(dt)  # .strftime('%Y-%m-%d'))
                 dt += step
 
-            groupedList = list()
-            groupLengthList = list()
-            bmuGroupList = list()
-            timeGroupList = list()
+            groupedListFuture = list()
+            groupLengthListFuture = list()
+            bmuGroupListFuture = list()
+            # timeGroupListFuture = list()
             for hh in range(futureSimNum):
+                start = time.time()
+
                 print('breaking up hydrogrpahs for future sim {}'.format(hh))
                 bmusTemp = self.futureBmusSim[hh].flatten()
                 tempBmusGroup = [[e[0] for e in d[1]] for d in
                                  itertools.groupby(enumerate(bmusTemp), key=operator.itemgetter(1))]
-                groupedList.append(tempBmusGroup)
-                groupLengthList.append(np.asarray([len(i) for i in tempBmusGroup]))
-                bmuGroupList.append(np.asarray([bmusTemp[i[0]] for i in tempBmusGroup]))
-                timeGroupList.append([np.asarray(midnightTime)[i] for i in tempBmusGroup])
+                groupedListFuture.append(tempBmusGroup)
+                groupLengthListFuture.append(np.asarray([len(i) for i in tempBmusGroup]))
+                bmuGroupListFuture.append(np.asarray([bmusTemp[i[0]] for i in tempBmusGroup]))
+                # timeGroupListFuture.append([np.asarray(midnightTime)[i] for i in tempBmusGroup]) # THIS SLOWS EVERYTHING DOWN 100 FOLD
+                # Calculate the end time and time taken
+                end = time.time()
+                length = end - start
+                print('completed in {} minutes'.format(length/60))
 
             simBmuChopped = []
             simBmuLengthChopped = []
             simBmuGroupsChopped = []
             for pp in range(futureSimNum):
-
+                start = time.time()
                 print('working on future realization #{}'.format(pp))
-                bmuGroup = bmuGroupList[pp]
-                groupLength = groupLengthList[pp]
-                grouped = groupedList[pp]
+                bmuGroupFuture = bmuGroupListFuture[pp]
+                groupLengthFuture = groupLengthListFuture[pp]
+                groupedFuture = groupedListFuture[pp]
                 simGroupLength = []
                 simGrouped = []
                 simBmu = []
-                for i in range(len(groupLength)):
+                for i in range(len(groupLengthFuture)):
                     # if np.remainder(i,10000) == 0:
                     #     print('done with {} hydrographs'.format(i))
-                    tempGrouped = grouped[i]
-                    tempBmu = int(bmuGroup[i])
-                    remainingDays = groupLength[i] - 5
-                    if groupLength[i] < 5:
-                        simGroupLength.append(int(groupLength[i]))
-                        simGrouped.append(grouped[i])
+                    tempGrouped = groupedFuture[i]
+                    tempBmu = int(bmuGroupFuture[i])
+                    remainingDays = groupLengthFuture[i] - 5
+                    if groupLengthFuture[i] < 5:
+                        simGroupLength.append(int(groupLengthFuture[i]))
+                        simGrouped.append(groupedFuture[i])
                         simBmu.append(tempBmu)
                     else:
                         counter = 0
-                        while (len(grouped[i]) - counter) > 5:
+                        while (len(groupedFuture[i]) - counter) > 5:
                             # print('we are in the loop with remainingDays = {}'.format(remainingDays))
                             # random days between 3 and 5
                             randLength = random.randint(1, 3) + 2
@@ -1304,7 +1463,7 @@ class weatherTypes():
                             simGroupLength.append(int(randLength))
                             # simGrouped.append(tempGrouped[0:randLength])
                             # print('should be adding {}'.format(grouped[i][counter:counter+randLength]))
-                            simGrouped.append(grouped[i][counter:counter + randLength])
+                            simGrouped.append(groupedFuture[i][counter:counter + randLength])
                             simBmu.append(tempBmu)
                             # remove those from the next step
                             # tempGrouped = np.delete(tempGrouped,np.arange(0,randLength))
@@ -1312,15 +1471,18 @@ class weatherTypes():
                             remainingDays = remainingDays - randLength
                             counter = counter + randLength
 
-                        if (len(grouped[i]) - counter) > 0:
-                            simGroupLength.append(int((len(grouped[i]) - counter)))
+                        if (len(groupedFuture[i]) - counter) > 0:
+                            simGroupLength.append(int((len(groupedFuture[i]) - counter)))
                             # simGrouped.append(tempGrouped[0:])
-                            simGrouped.append(grouped[i][counter:])
+                            simGrouped.append(groupedFuture[i][counter:])
                             simBmu.append(tempBmu)
                 simBmuLengthChopped.append(np.asarray(simGroupLength))
                 simBmuGroupsChopped.append(simGrouped)
                 simBmuChopped.append(np.asarray(simBmu))
-
+                # Calculate the end time and time taken
+                end = time.time()
+                length = end - start
+                print('completed in {} minutes'.format(length/60))
             self.simFutureBmuLengthChopped = simBmuLengthChopped
             self.simFutureBmuGroupsChopped = simBmuGroupsChopped
             self.simFutureBmuChopped = simBmuChopped
@@ -1335,17 +1497,17 @@ class weatherTypes():
             outputSamples['futureDatesSim'] = self.futureDatesSim
             outputSamples['historicalDatesSim'] = self.historicalDatesSim
             outputSamples['historicalBmusSim'] = self.historicalBmusSim
-            outputSamples['simHistBmuLengthCopped'] = self.simHistBmuLengthCopped
+            outputSamples['simHistBmuLengthChopped'] = self.simHistBmuLengthChopped
             outputSamples['simHistBmuGroupsChopped'] = self.simHistBmuGroupsChopped
             outputSamples['simHistBmuChopped'] = self.simHistBmuChopped
-            outputSamples['simFutureBmuLengthCopped'] = self.simFutureBmuLengthCopped
+            outputSamples['simFutureBmuLengthChopped'] = self.simFutureBmuLengthChopped
             outputSamples['simFutureBmuGroupsChopped'] = self.simFutureBmuGroupsChopped
             outputSamples['simFutureBmuChopped'] = self.simFutureBmuChopped
 
-            with open(samplesPickle, 'wb') as f:
+            with open(os.path.join(self.savePath,samplesPickle), 'wb') as f:
                 pickle.dump(outputSamples, f)
 
-    def separateHistoricalHydrographs(self,metOcean,numRealizations=100,shoreNorm=90):
+    def separateHistoricalHydrographs(self,metOcean,numRealizations=100):
         import itertools
         import operator
         from datetime import timedelta
@@ -1375,7 +1537,7 @@ class weatherTypes():
         groupedList.append(tempBmusGroup)
         groupLengthList.append(np.asarray([len(i) for i in tempBmusGroup]))
         bmuGroupList.append(np.asarray([bmus[i[0]] for i in tempBmusGroup]))
-        timeGroupList.append([np.asarray(midnightTime)[i] for i in tempBmusGroup])
+        timeGroupList.append([np.asarray(midnightTime)[i] for i in tempBmusGroup]) # THIS SLOWS EVERYTHING DOWN 100 FOLD
 
         simBmuChopped = []
         simBmuLengthChopped = []
@@ -1426,7 +1588,7 @@ class weatherTypes():
             simBmuGroupsChopped.append(simGrouped)
             simBmuChopped.append(np.asarray(simBmu))
 
-        self.histBmuLengthCopped = simBmuLengthChopped
+        self.histBmuLengthChopped = simBmuLengthChopped
         self.histBmuGroupsChopped = simBmuGroupsChopped
         self.histBmuChopped = simBmuChopped
 
@@ -1450,7 +1612,7 @@ class weatherTypes():
         dm = metOcean.Dm#[beginTime[0][0]:endingTime[0][0] + 24]
         ntr = metOcean.resWL#[beginTime[0][0]:endingTime[0][0] + 24]
 
-        waveNorm = dm - shoreNorm
+        waveNorm = dm - metOcean.shoreNormal
         neg = np.where((waveNorm > 180))
         waveNorm[neg[0]] = waveNorm[neg[0]] - 360
         neg2 = np.where((waveNorm < -180))
@@ -1808,8 +1970,8 @@ class weatherTypes():
         import pickle
         import calendar
         import pandas
-        dt = datetime(2024, 6, 1, 0, 0, 0)
-        end = datetime(2124, 5, 31, 23, 0, 0)
+        dt = datetime(self.futureSimStart, 6, 1, 0, 0, 0)
+        end = datetime(self.futureSimEnd, 5, 31, 23, 0, 0)
         step = timedelta(hours=1)
         hourlyTime = []
         while dt < end:
@@ -1867,8 +2029,7 @@ class weatherTypes():
                 #             stormDetails[6] = 55
                 #             stormDetails[7] = 25
 
-                durSim = self.simFutureBmuLengthCopped[simNum][i]
-                # durSim = self.simFutureBmuLengthChopped[simNum][i]
+                durSim = self.simFutureBmuLengthChopped[simNum][i]
 
                 simDmNorm = (stormDetails[4] - np.asarray(self.bmuDataMin)[tempBmu, 0]) / (
                             np.asarray(self.bmuDataMax)[tempBmu, 0] - np.asarray(self.bmuDataMin)[tempBmu, 0])
@@ -1932,12 +2093,12 @@ class weatherTypes():
 
 
             cumulativeHours = np.cumsum(np.hstack(simTime))
-            newDailyTime = [datetime(2024, 6, 1) + timedelta(days=ii) for ii in cumulativeHours]
+            newDailyTime = [datetime(self.futureSimStart, 6, 1) + timedelta(days=ii) for ii in cumulativeHours]
             simDeltaT = [(tt - newDailyTime[0]).total_seconds() / (3600 * 24) for tt in newDailyTime]
 
             # Just for water levels at different time interval
             cumulativeWLHours = np.cumsum(np.hstack(simWLTime))
-            newDailyWLTime = [datetime(2024, 6, 1) + timedelta(days=ii) for ii in cumulativeWLHours]
+            newDailyWLTime = [datetime(self.futureSimStart, 6, 1) + timedelta(days=ii) for ii in cumulativeWLHours]
             simDeltaWLT = [(tt - newDailyWLTime[0]).total_seconds() / (3600 * 24) for tt in newDailyWLTime]
 
             print('water level time vs. surge: {} vs {}'.format(len(np.hstack(simSs)),len(simDeltaWLT)))
@@ -1970,8 +2131,7 @@ class weatherTypes():
 
             # simsPickle = ('/home/dylananderson/projects/atlanticClimate/Sims/simulation{}.pickle'.format(simNum))
             # simsPickle = ('/media/dylananderson/Elements/Sims/simulation{}.pickle'.format(simNum))
-            simsPickle = (
-                '/volumes/anderson/vaSims/futureSims{}.pickle'.format(simNum))
+            simsPickle = ('futureSims{}.pickle'.format(simNum))
 
             outputSims = {}
             outputSims['simulationData'] = simDataInterp.T
@@ -1985,7 +2145,7 @@ class weatherTypes():
 
             outputSims['time'] = hourlyTime
 
-            with open(simsPickle, 'wb') as f:
+            with open(os.path.join(self.savePath,simsPickle), 'wb') as f:
                 pickle.dump(outputSims, f)
 
 
@@ -2029,9 +2189,9 @@ class weatherTypes():
         ciArray = []
         for hh in range(10):
 
-            file = r"/Volumes/anderson/vaSims/futureSims{}.pickle".format(hh)
+            file = r"futureSims{}.pickle".format(hh)
 
-            with open(file, "rb") as input_file:
+            with open(os.path.join(self.savePath,file), "rb") as input_file:
                 # simsInput = pickle.load(input_file)
                 simsInput = pd.read_pickle(input_file)
             simulationData = simsInput['simulationData']

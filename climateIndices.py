@@ -18,7 +18,7 @@ import pickle
 import random as rm
 from functions import copulaSimulation
 from itertools import groupby
-
+import os
 
 class climateIndices():
     '''
@@ -40,6 +40,7 @@ class climateIndices():
         self.lonRight = kwargs.get('lonRight',350)
         self.latBottom = kwargs.get('latBottom', 0)
         self.latTop = kwargs.get('latTop', 65)
+        self.savePath = kwargs.get('savePath',os.getcwd())
 
     def atlanticAWT(self,loadPrevious=False,plotOutput=False):
 
@@ -485,17 +486,17 @@ class climateIndices():
 
             # sim_years = 100
             # start simulation at PCs available data
-            d1 = datetime.datetime(2022, 6, 1)
+            d1 = datetime.datetime(self.awtEnd, 6, 1)
             d2 = datetime.datetime(d1.year + sim_years, d1.month, d1.day)
             dates_sim2 = [d1 + datetime.timedelta(days=i) for i in range((d2 - d1).days + 1)]
             # dates_sim = dates_sim[0:-1]
 
             # sim_years = 100
             # start simulation at PCs available data
-            d1 = datetime.datetime(2022, 6, 1)  # x2d(xds_cov_fit.time[0])
-            d2 = datetime.datetime(2022 + int(sim_years), 6, 1)  # datetime(d1.year+sim_years, d1.month, d1.day)
-            dt = datetime.date(2022, 6, 1)
-            end = datetime.date(2022 + int(sim_years), 7, 1)
+            d1 = datetime.datetime(self.awtEnd, 6, 1)  # x2d(xds_cov_fit.time[0])
+            d2 = datetime.datetime(self.awtEnd + int(sim_years), 6, 1)  # datetime(d1.year+sim_years, d1.month, d1.day)
+            dt = datetime.date(self.awtEnd, 6, 1)
+            end = datetime.date(self.awtEnd + int(sim_years), 7, 1)
             # step = datetime.timedelta(months=1)
             step = relativedelta(months=1)
             dates_sim = []
@@ -534,7 +535,7 @@ class climateIndices():
             outputSamples['dailyPC3'] = dailyPC3
             outputSamples['nPercent'] = nPercent
 
-            with open(samplesPickle, 'wb') as f:
+            with open(os.path.join(self.savePath,samplesPickle), 'wb') as f:
                 pickle.dump(outputSamples, f)
 
             # awtPickle = 'awtPCs.pickle'
@@ -1046,7 +1047,7 @@ class climateIndices():
             ALRW.SetFitData(
                 num_clusters, self.xds_bmus_fit, self.d_terms_settings)
 
-            ALRW.FitModel(max_iter=20000)
+            ALRW.FitModel(max_iter=2000)
 
             # p_report = op.join(p_data, 'r_{0}'.format(name_test))
 
@@ -1069,7 +1070,7 @@ class climateIndices():
                 # Historical Simulation
                 # start simulation at PCs available data
                 d1 = datetime(1979, 6, 1)  # x2d(xds_cov_fit.time[0])
-                d2 = datetime(2023, 6, 1)  # datetime(d1.year+sim_years, d1.month, d1.day)
+                d2 = datetime(self.awtEnd, 6, 1)  # datetime(d1.year+sim_years, d1.month, d1.day)
                 dates_sim = [d1 + timedelta(days=i) for i in range((d2 - d1).days + 1)]
                 # print some info
                 # print('ALR model fit   : {0} --- {1}'.format(
@@ -1122,22 +1123,22 @@ class climateIndices():
                     # ALR FUTURE model simulations
                     sim_years = 100
                     # start simulation at PCs available data
-                    d1 = datetime(2023, 6, 1)  # x2d(xds_cov_fit.time[0])
-                    d2 = datetime(2123, 6, 1)  # datetime(d1.year+sim_years, d1.month, d1.day)
+                    d1 = datetime(self.awtEnd, 6, 1)  # x2d(xds_cov_fit.time[0])
+                    d2 = datetime(self.awtEnd+100, 6, 1)  # datetime(d1.year+sim_years, d1.month, d1.day)
                     self.future_dates_sim = [d1 + timedelta(days=i) for i in range((d2 - d1).days + 1)]
 
-                    d1 = datetime(2023, 6, 1)
-                    dt = datetime(2023, 6, 1)
-                    end = datetime(2123, 6, 1)
+                    d1 = datetime(self.awtEnd, 6, 1)
+                    dt = datetime(self.awtEnd, 6, 1)
+                    end = datetime(self.awtEnd+100, 6, 1)
                     step = relativedelta(years=1)
                     simAnnualTime = []
                     while dt < end:
                         simAnnualTime.append(dt)
                         dt += step
 
-                    d1 = datetime(2023, 6, 1)
-                    dt = datetime(2023, 6, 1)
-                    end = datetime(2123, 6, 2)
+                    d1 = datetime(self.awtEnd, 6, 1)
+                    dt = datetime(self.awtEnd, 6, 1)
+                    end = datetime(self.awtEnd+100, 6, 2)
                     # step = datetime.timedelta(months=1)
                     step = relativedelta(days=1)
                     simDailyTime = []
@@ -1263,5 +1264,5 @@ class climateIndices():
                 outputSamples['futureDatesSim'] = self.futureDatesSim
 
 
-            with open(samplesPickle, 'wb') as f:
+            with open(os.path.join(self.savePath,samplesPickle), 'wb') as f:
                 pickle.dump(outputSamples, f)

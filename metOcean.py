@@ -21,7 +21,7 @@ class getMetOcean():
         self.wlPath = kwargs.get('wlPath','/users/dylananderson/documents/data/frfWaterLevel/')
         self.shoreNormal = kwargs.get('shoreNormal',72)
         self.chlDataLoc = kwargs.get('chlDataLoc',u'https://chldata.erdc.dren.mil/thredds/dodsC/wis/')
-
+        self.savePath = kwargs.get('savePath',os.getcwd())
 
 
     def getWaterLevels(self):
