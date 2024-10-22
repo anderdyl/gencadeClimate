@@ -1333,6 +1333,8 @@ class weatherTypes():
         from functions import xds_reindex_daily as xr_daily
         from functions import xds_common_dates_daily as xcd_daily
         from functions import ALR_WRP
+        from functions import xds_reindex_flexible as xr_flexible
+        from functions import xds_common_dates_flexible as xcd_flexible
 
         from datetime import datetime, timedelta
         self.xds_KMA_fit = xr.Dataset(
@@ -1341,7 +1343,9 @@ class weatherTypes():
             },
             coords={'time': [x for x in self.DATES]}
         )
-        self.xds_KMA_fit = xr_daily(self.xds_KMA_fit, datetime(1979, 6, 1), datetime(2024, 5, 31))
+        # self.xds_KMA_fit = xr_daily(self.xds_KMA_fit, datetime(1979, 6, 1), datetime(2024, 5, 31))
+        self.xds_KMA_fit = xr_flexible(self.xds_KMA_fit, datetime(1979, 6, 1), datetime(2024, 5, 31),avgTime=self.avgTime)
+
 
 
         # AWT: PCs (Generated with copula simulation. Annual data, parse to daily)
@@ -1354,7 +1358,8 @@ class weatherTypes():
             coords={'time': [datetime(climate.mjoYear[r], climate.mjoMonth[r], climate.mjoDay[r]) for r in range(len(climate.mjoDay))]}
         )
         # reindex annual data to daily data
-        self.xds_PCs_fit = xr_daily(self.xds_PCs_fit, datetime(1979, 6, 1), datetime(2024, 5, 31))
+        # self.xds_PCs_fit = xr_daily(self.xds_PCs_fit, datetime(1979, 6, 1), datetime(2024, 5, 31))
+        self.xds_PCs_fit = xr_flexible(self.xds_PCs_fit, datetime(1979, 6, 1), datetime(2024, 5, 31),avgTime=self.avgTime)
 
         # MJO: RMM1s (Generated with copula simulation. Annual data, parse to daily)
         self.xds_MJO_fit = xr.Dataset(
@@ -1366,7 +1371,8 @@ class weatherTypes():
             # coords = {'time': timeMJO}
         )
         # reindex to daily data after 1979-01-01 (avoid NaN)
-        self.xds_MJO_fit = xr_daily(self.xds_MJO_fit, datetime(1979, 6, 1), datetime(2024, 5, 31))
+        # self.xds_MJO_fit = xr_daily(self.xds_MJO_fit, datetime(1979, 6, 1), datetime(2024, 5, 31))
+        self.xds_MJO_fit = xr_flexible(self.xds_MJO_fit, datetime(1979, 6, 1), datetime(2024, 5, 31),avgTime=self.avgTime)
 
         # --------------------------------------
         # Mount covariates matrix
@@ -1377,7 +1383,9 @@ class weatherTypes():
 
         # covariates: FIT
         # d_covars_fit = xcd_daily([xds_MJO_fit, xds_PCs_fit, xds_KMA_fit])
-        self.d_covars_fit = xcd_daily([self.xds_PCs_fit, self.xds_MJO_fit, self.xds_KMA_fit])
+        # self.d_covars_fit = xcd_daily([self.xds_PCs_fit, self.xds_MJO_fit, self.xds_KMA_fit])
+
+        self.d_covars_fit = xcd_flexible([self.xds_PCs_fit, self.xds_MJO_fit, self.xds_KMA_fit],avgTime=self.avgTime)
 
         # PCs covar
         cov_PCs = self.xds_PCs_fit.sel(time=slice(self.d_covars_fit[0], self.d_covars_fit[-1]))
@@ -1442,7 +1450,9 @@ class weatherTypes():
             # start simulation at PCs available data
             d1 = datetime(1979, 6, 1)  # x2d(xds_cov_fit.time[0])
             d2 = datetime(2024, 6, 1)  # datetime(d1.year+sim_years, d1.month, d1.day)
-            dates_sim = [d1 + timedelta(days=i) for i in range((d2 - d1).days + 1)]
+            # dates_sim = [d1 + timedelta(days=i) for i in range((d2 - d1).days + 1)]
+            dates_sim = [d1 + timedelta(hours=self.avgTime) for i in range((d2 - d1).days*(24/self.avgTime) + 1)]
+
             # print some info
             # print('ALR model fit   : {0} --- {1}'.format(
             #    d_covars_fit[0], d_covars_fit[-1]))
@@ -1470,7 +1480,9 @@ class weatherTypes():
                 # start simulation at PCs available data
                 d1 = datetime(self.futureSimStart, 6, 1)  # x2d(xds_cov_fit.time[0])
                 d2 = datetime(self.futureSimEnd, 6, 1)  # datetime(d1.year+sim_years, d1.month, d1.day)
-                self.future_dates_sim = [d1 + timedelta(days=i) for i in range((d2 - d1).days + 1)]
+                # self.future_dates_sim = [d1 + timedelta(days=i) for i in range((d2 - d1).days + 1)]
+                self.future_dates_sim = [d1 + timedelta(hours=self.avgTime) for i in
+                             range((d2 - d1).days * (24 / self.avgTime) + 1)]
 
                 d1 = datetime(self.futureSimStart, 6, 1)
                 dt = datetime(self.futureSimStart, 6, 1)
@@ -1485,7 +1497,9 @@ class weatherTypes():
                 dt = datetime(self.futureSimStart, 6, 1)
                 end = datetime(self.futureSimEnd, 6, 2)
                 # step = datetime.timedelta(months=1)
-                step = relativedelta(days=1)
+                # step = relativedelta(days=1)
+                step = relativedelta(hours=self.avgTime)
+
                 simDailyTime = []
                 while dt < end:
                     simDailyTime.append(dt)
@@ -1534,7 +1548,8 @@ class weatherTypes():
                     coords={'time': [datetime(r[0], r[1], r[2]) for r in simDailyDatesMatrix]}
                 )
                 # reindex annual data to daily data
-                self.xds_PCs_sim = xr_daily(self.xds_PCs_sim)
+                # self.xds_PCs_sim = xr_daily(self.xds_PCs_sim)
+                self.xds_PCs_sim = xr_flexible(self.xds_PCs_sim,avgTime=self.avgTime)
 
 
                 # MJO: PCs (Generated with copula simulation. Annual data, parse to daily)
@@ -1546,11 +1561,13 @@ class weatherTypes():
                     coords={'time': [datetime(r[0], r[1], r[2]) for r in simDailyDatesMatrix]}
                 )
                 # reindex annual data to daily data
-                self.xds_MJO_sim = xr_daily(self.xds_MJO_sim)
+                # self.xds_MJO_sim = xr_daily(self.xds_MJO_sim)
+                self.xds_MJO_sim = xr_flexible(self.xds_MJO_sim,avgTime=self.avgTime)
 
 
 
-                d_covars_sim = xcd_daily([self.xds_PCs_sim,self.xds_MJO_sim])
+                # d_covars_sim = xcd_daily([self.xds_PCs_sim,self.xds_MJO_sim])
+                d_covars_sim = xcd_flexible([self.xds_PCs_sim,self.xds_MJO_sim],avgTime=self.avgTime)
 
                 # PCs covar
                 cov_PCs = self.xds_PCs_sim.sel(time=slice(d_covars_sim[0], d_covars_sim[-1]))
@@ -1603,7 +1620,9 @@ class weatherTypes():
 
             dt = datetime(1979, 6, 1)
             end = datetime(2024, 6, 1)
-            step = timedelta(days=1)
+            # step = timedelta(days=1)
+            step = timedelta(hours=self.avgTime)
+
             midnightTime = []
             while dt < end:
                 midnightTime.append(dt)  # .strftime('%Y-%m-%d'))
@@ -1650,17 +1669,17 @@ class weatherTypes():
                     #     print('done with {} hydrographs'.format(i))
                     tempGrouped = grouped[i]
                     tempBmu = int(bmuGroup[i])
-                    remainingDays = groupLength[i] - 5
-                    if groupLength[i] < 5:
+                    remainingDays = groupLength[i] - int(5*(24/self.avgTime))
+                    if groupLength[i] < int(5*(24/self.avgTime)):
                         simGroupLength.append(int(groupLength[i]))
                         simGrouped.append(grouped[i])
                         simBmu.append(tempBmu)
                     else:
                         counter = 0
-                        while (len(grouped[i]) - counter) > 5:
+                        while (len(grouped[i]) - counter) > int(5*(24/self.avgTime)):
                             # print('we are in the loop with remainingDays = {}'.format(remainingDays))
                             # random days between 3 and 5
-                            randLength = random.randint(1, 3) + 2
+                            randLength = random.randint(1, int(3*(24/self.avgTime))) + int(2*(24/self.avgTime))
                             # add this to the record
                             simGroupLength.append(int(randLength))
                             # simGrouped.append(tempGrouped[0:randLength])
@@ -1693,7 +1712,9 @@ class weatherTypes():
 
             dt = datetime(self.futureSimStart, 6, 1)
             end = datetime(self.futureSimEnd, 6, 2)
-            step = timedelta(days=1)
+            # step = timedelta(days=1)
+            step = timedelta(hours=self.avgTime)
+
             midnightTime = []
             while dt < end:
                 midnightTime.append(dt)  # .strftime('%Y-%m-%d'))
@@ -1736,17 +1757,17 @@ class weatherTypes():
                     #     print('done with {} hydrographs'.format(i))
                     tempGrouped = groupedFuture[i]
                     tempBmu = int(bmuGroupFuture[i])
-                    remainingDays = groupLengthFuture[i] - 5
-                    if groupLengthFuture[i] < 5:
+                    remainingDays = groupLengthFuture[i] - int(5*(24/self.avgTime))
+                    if groupLengthFuture[i] < int(5*(24/self.avgTime)):
                         simGroupLength.append(int(groupLengthFuture[i]))
                         simGrouped.append(groupedFuture[i])
                         simBmu.append(tempBmu)
                     else:
                         counter = 0
-                        while (len(groupedFuture[i]) - counter) > 5:
+                        while (len(groupedFuture[i]) - counter) > int(5*(24/self.avgTime)):
                             # print('we are in the loop with remainingDays = {}'.format(remainingDays))
                             # random days between 3 and 5
-                            randLength = random.randint(1, 3) + 2
+                            randLength = random.randint(1, int(3*(24/self.avgTime))) + int(2*(24/self.avgTime))
                             # add this to the record
                             simGroupLength.append(int(randLength))
                             # simGrouped.append(tempGrouped[0:randLength])
@@ -2382,7 +2403,9 @@ class weatherTypes():
 
 
             cumulativeHours = np.cumsum(np.hstack(simTime))
+            # newDailyTime = [datetime(self.futureSimStart, 6, 1) + timedelta(days=ii) for ii in cumulativeHours]
             newDailyTime = [datetime(self.futureSimStart, 6, 1) + timedelta(days=ii) for ii in cumulativeHours]
+
             simDeltaT = [(tt - newDailyTime[0]).total_seconds() / (3600 * 24) for tt in newDailyTime]
 
             # Just for water levels at different time interval

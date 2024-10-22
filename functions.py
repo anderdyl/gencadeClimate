@@ -603,6 +603,38 @@ def xds_reindex_daily(xds_data,  dt_lim1=None, dt_lim2=None):
 
 
 
+def xds_reindex_flexible(xds_data,  dt_lim1=None, dt_lim2=None,avgTime=None):
+    from datetime import datetime
+    '''
+    Reindex xarray.Dataset to daily data between optional limits
+    '''
+
+    # TODO: remove limits from inside function
+
+    # TODO: remove this swich and use date2datenum
+    if isinstance(xds_data.time.values[0], datetime):
+        xds_dt1 = xds_data.time.values[0]
+        xds_dt2 = xds_data.time.values[-1]
+    else:
+        # parse xds times to python datetime
+        xds_dt1 = xds2datetime(xds_data.time[0])
+        xds_dt2 = xds2datetime(xds_data.time[-1])
+
+    # cut data at limits
+    if dt_lim1:
+        xds_dt1 = max(xds_dt1, dt_lim1)
+    if dt_lim2:
+        xds_dt2 = min(xds_dt2, dt_lim2)
+
+    # number of days
+    # num_days = (xds_dt2-xds_dt1).days+1
+    num_windows = ((xds_dt2-xds_dt1).days)*(24/avgTime)+1
+    # reindex xarray.Dataset
+    return xds_data.reindex(
+        {'time': [xds_dt1 + timedelta(hours=avgTime) for i in range(num_windows)]},
+        method = 'pad',
+    )
+
 
 def xds_common_dates_daily(xds_list):
     from datetime import timedelta
@@ -613,6 +645,15 @@ def xds_common_dates_daily(xds_list):
     d1, d2 = xds_limit_dates(xds_list)
     return [d1 + timedelta(days=i) for i in range((d2-d1).days+1)]
 
+
+def xds_common_dates_flexible(xds_list,avgTime=None):
+    from datetime import timedelta
+    '''
+    returns daily datetime array between a list of xarray.Dataset comon date
+    limits
+    '''
+    d1, d2 = xds_limit_dates(xds_list)
+    return [d1 + timedelta(hours=avgTime) for i in range((d2-d1).days*(24/avgTime)+1)]
 
 def xds_limit_dates(xds_list):
     '''
