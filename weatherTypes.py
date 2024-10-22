@@ -25,6 +25,7 @@ class weatherTypes():
         self.slpPath = kwargs.get('slpPath')
         self.minGroupSize = kwargs.get('minGroupSize',50)
         self.savePath = kwargs.get('savePath',os.getcwd())
+        self.basin = kwargs.get('basin','atlantic')
         # self.lonLeft = kwargs.get('cameraID', 'c1')
         # self.lonRight = kwargs.get('rawPath')
         # self.latBottom = kwargs.get('nFrames', 1)
@@ -142,6 +143,10 @@ class weatherTypes():
                 x, y = np.meshgrid(ds.longitude.values, ds.latitude.values.flatten())
                 xFlat = x.flatten()
                 yFlat = y.flatten()
+
+                # inder = np.where(xFlat < 180)
+                # xFlat[inder] = xFlat[inder] + 360
+
                 xRem = np.fmod(xFlat, self.resolution)
                 yRem = np.fmod(yFlat, self.resolution)
                 cc = 0
@@ -205,216 +210,103 @@ class weatherTypes():
         self.Mx = Mx
         self.My = My
 
-    def extractCFSR(self,printToScreen=False):
+    def extractCFSR(self,printToScreen=False,estelaMat=None,loadPrior=False,loadPickle='./'):
         '''
         This function is utilized for opening *.raw Argus files prior to a debayering task,
         and adds the
 
         Must call this function before calling any debayering functions
         '''
-        # with open(self.rawPath, "rb") as my_file:
-        #     self.fh = my_file
-        #     cameraIO.readHeaderLines(self)
-        #     cameraIO.readAIIIrawFullFrameWithTimeStamp(self)
 
-        year = self.startTime[0]
-        month = self.startTime[1]
-        year2 = self.endTime[0]
-        month2 = self.endTime[1]
-        print('Starting extract at {}-{}'.format(year, month))
+        if loadPrior==True:
+            import pickle
+            with open(loadPickle, "rb") as input_file:
+                slps = pickle.load(input_file)
+            self.DATES = slps['DATES']
+            self.xGrid = slps['x2']
+            self.yGrid = slps['y2']
+            self.xFlat = slps['xFlat']
+            self.yFlat = slps['yFlat']
+            self.isOnLandGrid = slps['isOnLandGrid']
+            self.isOnLandFlat = slps['isOnLandFlat']
+            self.SLPS = slps['SLPS']
+            self.GRDS = slps['GRDS']
+            self.Mx = slps['Mx']
+            self.My = slps['My']
+            print('loaded prior SLP predictor')
 
-        # estelaMat = '/media/dylananderson/Elements1/ESTELA/out/NagsHead2/NagsHead2_obj.mat'
-
-        filePaths = np.sort(os.listdir(self.slpPath))
-
-        initFile = self.slpPath + 'prmsl.cdas1.201104.grb2.nc'
-
-        dt = datetime(year, month, 1)
-        if month2 == 12:
-            end = datetime(year2 + 1, 1, 1)
         else:
-            end = datetime(year2, month2 + 1, 1)
-        # step = datetime.timedelta(months=1)
-        step = relativedelta(months=1)
-        extractTime = []
-        while dt < end:
-            extractTime.append(dt)
-            dt += step
-
-        data = Dataset(initFile)
-        lat = data.variables['lat'][:]
-        lon = data.variables['lon'][:]
-
-        pos_lon1 = np.where((lon == self.lonLeft - 2))
-        pos_lon2 = np.where((lon == self.lonRight + 2))
-        pos_lat2 = np.where((lat == self.latTop + 2))
-        pos_lat1 = np.where((lat == self.latBot - 2))
-
-        latitud = lat[(pos_lat2[0][0]):(pos_lat1[0][0] + 1)]
-        if self.lonLeft > self.lonRight:
-            longitud = np.hstack((lon[pos_lon1[0][0]:], lon[0:(pos_lon2[0][0] + 1)]))
-        else:
-            longitud = lon[pos_lon1[0][0]:(pos_lon2[0][0] + 1)]
-        [x, y] = np.meshgrid(longitud, latitud)
-
-        counter = 0
-        # Now need to loop through the number of files we're extracting data from
-        for tt in extractTime:
-
-            if self.slpMemory == False:
-                yearExtract = tt.year
-                monthExtract = tt.month
-
-                if (yearExtract == 2011 and monthExtract >= 4) or yearExtract > 2011:
-                    file = self.slpPath + 'prmsl.cdas1.{}{:02d}.grb2.nc'.format(yearExtract,
-                                                                           monthExtract)
-                    # file = '/users/dylananderson/documents/data/prmsl/prmsl.cdas1.{}{:02d}.grb2.nc'.format(yearExtract,
-                    #                                                                                        monthExtract)
-                else:
-                    file = self.slpPath + 'prmsl.gdas.{}{:02d}.grb2.nc'.format(yearExtract,
-                                                                          monthExtract)
-                    # file = '/users/dylananderson/documents/data/prmsl/prmsl.gdas.{}{:02d}.grb2.nc'.format(yearExtract,
-                    #                                                                                       monthExtract)
-                data = Dataset(file)
-                time = data.variables['valid_date_time']
-                if printToScreen == True:
-
-                    print('{}-{}'.format(yearExtract, monthExtract))
-
-                # extract times and turn them into datetimes
-                # years = np.empty((len(time),))
-                year = [int(''.join(list(map(lambda x: x.decode('utf-8'), i))).strip()[0:4]) for i in time]
-                month = [int(''.join(list(map(lambda x: x.decode('utf-8'), i))).strip()[4:6]) for i in time]
-                day = [int(''.join(list(map(lambda x: x.decode('utf-8'), i))).strip()[6:8]) for i in time]
-                hour = [int(''.join(list(map(lambda x: x.decode('utf-8'), i))).strip()[8:]) for i in time]
-                d_vec = np.vstack((year, month, day, hour)).T
-                dates = [datetime(d[0], d[1], d[2], d[3], 0, 0) for d in d_vec]
-
-                # Extracting SLP fields, need to account for wrap around international date line
-                if self.lonLeft > self.lonRight:
-                    # longitud = np.hstack((lon[pos_lon1[0][0]:], lon[0:(pos_lon2[0][0] + 1)]))
-                    slp1 = data.variables['PRMSL_L101'][:, (pos_lat2[0][0]):(pos_lat1[0][0] + 1), (pos_lon1[0][0]):]
-                    slp2 = data.variables['PRMSL_L101'][:, (pos_lat2[0][0]):(pos_lat1[0][0] + 1),
-                           0:(pos_lon2[0][0] + 1)]
-                    slp = np.concatenate((slp1, slp2), axis=2)
-                else:
-                    slp = data.variables['PRMSL_L101'][:, (pos_lat2[0][0]):(pos_lat1[0][0] + 1),
-                          (pos_lon1[0][0]):(pos_lon2[0][0] + 1)]
-
-                # are we averaging to a shorter time window?
-                m, n, p = np.shape(slp)
-                slp_ = np.zeros((n * p, m))
-                grd_ = np.zeros((n * p, m))
-                for mmm in range(m):
-                    slp_[:, mmm] = slp[mmm, :, :].flatten()
-                    vgrad = np.gradient(slp[mmm, :, :])
-                    grd_[:, mmm] = np.sqrt(vgrad[0] ** 2 + vgrad[1] ** 2).flatten()
-                # slp_ = slp.reshape(n*m,p)
-
-                if self.avgTime == 0:
-                    if printToScreen == True:
-                        print('returning hourly values')
-                    elif counter == 0:
-                        print('returning hourly values')
-
-                    slpAvg = slp_
-                    grdAvg = grd_
-                    datesAvg = dates
-                else:
-                    numWindows = int(len(time) / self.avgTime)
-                    if printToScreen == True:
-                        print('averaging every {} hours to {} timesteps'.format(self.avgTime, numWindows))
-                    elif counter == 0:
-                        print('averaging every {} hours to {} timesteps'.format(self.avgTime, numWindows))
-
-                    c = 0
-                    datesAvg = list()
-                    slpAvg = np.empty((n * p, numWindows))
-                    grdAvg = np.empty((n * p, numWindows))
-
-                    for t in range(numWindows):
-                        slpAvg[:, t] = np.nanmean(slp_[:, c:c + self.avgTime], axis=1)
-                        grdAvg[:, t] = np.nanmean(grd_[:, c:c + self.avgTime], axis=1)
-                        datesAvg.append(dates[c])
-                        c = c + self.avgTime
-
-                # are we reducing the resolution of the grid?
-                if self.resolution == 0.5:
-                    if printToScreen == True:
-                        print('keeping full 0.5 degree resolution')
-                    elif counter == 0:
-                        print('keeping full 0.5 degree resolution')
-
-                    slpDownscaled = slpAvg
-                    grdDownscaled = grdAvg
-                    xDownscaled = x.flatten()
-                    yDownscaled = y.flatten()
-                    x2 = x
-                    y2 = y
-                else:
-                    xFlat = x.flatten()
-                    yFlat = y.flatten()
-                    xRem = np.fmod(xFlat, self.resolution)
-                    yRem = np.fmod(yFlat, self.resolution)
-                    cc = 0
-                    for pp in range(len(xFlat)):
-                        if xRem[pp] == 0:
-                            if yRem[pp] == 0:
-                                if cc == 0:
-                                    ind2deg = int(pp)
-                                    cc = cc + 1
-                                else:
-                                    ind2deg = np.hstack((ind2deg, int(pp)))
-                                    cc = cc + 1
-                    slpDownscaled = slpAvg[ind2deg, :]
-                    grdDownscaled = grdAvg[ind2deg, :]
-                    xDownscaled = xFlat[ind2deg]
-                    yDownscaled = yFlat[ind2deg]
-                    if printToScreen == True:
-                        print('Downscaling to {} degree resolution'.format(self.resolution))
-                        print('{} points rather than {} (full)'.format(len(xDownscaled), len(xFlat)))
-                    elif counter == 0:
-                        print('Downscaling to {} degree resolution'.format(self.resolution))
-                        print('{} points rather than {} (full)'.format(len(xDownscaled), len(xFlat)))
-                    reshapeIndX = np.where((np.diff(xDownscaled) > 4) | (np.diff(xDownscaled) < -4))
-                    reshapeIndY = np.where((np.diff(yDownscaled) < 0))
-                    x2 = xDownscaled.reshape(int(len(reshapeIndY[0]) + 1), int(reshapeIndX[0][0] + 1)).filled()
-                    y2 = yDownscaled.reshape(int(len(reshapeIndY[0]) + 1), int(reshapeIndX[0][0] + 1)).filled()
-
-                My, Mx = np.shape(y2)
-                slpMem = slpDownscaled
-                grdMem = grdDownscaled
-                datesMem = datesAvg
 
 
+            year = self.startTime[0]
+            month = self.startTime[1]
+            year2 = self.endTime[0]
+            month2 = self.endTime[1]
+            print('Starting extract at {}-{}'.format(year, month))
+
+            # estelaMat = '/media/dylananderson/Elements1/ESTELA/out/NagsHead2/NagsHead2_obj.mat'
+
+            filePaths = np.sort(os.listdir(self.slpPath))
+
+            initFile = self.slpPath + 'prmsl.cdas1.201104.grb2.nc'
+
+            dt = datetime(year, month, 1)
+            if month2 == 12:
+                end = datetime(year2 + 1, 1, 1)
             else:
+                end = datetime(year2, month2 + 1, 1)
+            # step = datetime.timedelta(months=1)
+            step = relativedelta(months=1)
+            extractTime = []
+            while dt < end:
+                extractTime.append(dt)
+                dt += step
 
-                for mm in range(2):
-                    if mm == 0:
-                        monthExtract = tt.month - 1
-                        if monthExtract == 0:
-                            monthExtract = 12
-                            yearExtract = tt.year - 1
-                        else:
-                            yearExtract = tt.year
-                    else:
-                        yearExtract = tt.year
-                        monthExtract = tt.month
+            data = Dataset(initFile)
+            lat = data.variables['lat'][:]
+            lon = data.variables['lon'][:]
 
-                    if (yearExtract == 2011 and monthExtract >= 4) or yearExtract > 2012:
+            pos_lon1 = np.where((lon == self.lonLeft - 2))
+            pos_lon2 = np.where((lon == self.lonRight + 2))
+            pos_lat2 = np.where((lat == self.latTop + 2))
+            pos_lat1 = np.where((lat == self.latBot - 2))
+
+            latitud = lat[(pos_lat2[0][0]):(pos_lat1[0][0] + 1)]
+            if self.lonLeft > self.lonRight:
+                longitud = np.hstack((lon[pos_lon1[0][0]:], lon[0:(pos_lon2[0][0] + 1)]))
+            else:
+                longitud = lon[pos_lon1[0][0]:(pos_lon2[0][0] + 1)]
+            [x, y] = np.meshgrid(longitud, latitud)
+
+            def roundPartial(value, resolution):
+                return round(value / resolution) * resolution
+
+            def ceilPartial(value, resolution):
+                return np.ceil(value / resolution) * resolution
+
+            counter = 0
+            # Now need to loop through the number of files we're extracting data from
+            for tt in extractTime:
+
+                if self.slpMemory == False:
+                    yearExtract = tt.year
+                    monthExtract = tt.month
+
+                    if (yearExtract == 2011 and monthExtract >= 4) or yearExtract > 2011:
                         file = self.slpPath + 'prmsl.cdas1.{}{:02d}.grb2.nc'.format(yearExtract,
-                                                                                    monthExtract)
+                                                                               monthExtract)
                         # file = '/users/dylananderson/documents/data/prmsl/prmsl.cdas1.{}{:02d}.grb2.nc'.format(yearExtract,
                         #                                                                                        monthExtract)
                     else:
                         file = self.slpPath + 'prmsl.gdas.{}{:02d}.grb2.nc'.format(yearExtract,
-                                                                                   monthExtract)
+                                                                              monthExtract)
                         # file = '/users/dylananderson/documents/data/prmsl/prmsl.gdas.{}{:02d}.grb2.nc'.format(yearExtract,
                         #                                                                                       monthExtract)
-
                     data = Dataset(file)
                     time = data.variables['valid_date_time']
-                    print('{}-{}'.format(yearExtract, monthExtract))
+                    if printToScreen == True:
+
+                        print('{}-{}'.format(yearExtract, monthExtract))
 
                     # extract times and turn them into datetimes
                     # years = np.empty((len(time),))
@@ -436,608 +328,1004 @@ class weatherTypes():
                         slp = data.variables['PRMSL_L101'][:, (pos_lat2[0][0]):(pos_lat1[0][0] + 1),
                               (pos_lon1[0][0]):(pos_lon2[0][0] + 1)]
 
-                # are we averaging to a shorter time window?
-                m, n, p = np.shape(slp)
-                slp_ = np.zeros((n * p, m))
-                grd_ = np.zeros((n * p, m))
-                for mmm in range(m):
-                    slp_[:, mmm] = slp[mmm, :, :].flatten()
-                    vgrad = np.gradient(slp[mmm, :, :])
-                    grd_[:, mmm] = np.sqrt(vgrad[0] ** 2 + vgrad[1] ** 2).flatten()
-                # slp_ = slp.reshape(n*m,p)
+                    # are we averaging to a shorter time window?
+                    m, n, p = np.shape(slp)
+                    slp_ = np.zeros((n * p, m))
+                    grd_ = np.zeros((n * p, m))
+                    for mmm in range(m):
+                        slp_[:, mmm] = slp[mmm, :, :].flatten()
+                        vgrad = np.gradient(slp[mmm, :, :])
+                        grd_[:, mmm] = np.sqrt(vgrad[0] ** 2 + vgrad[1] ** 2).flatten()
+                    # slp_ = slp.reshape(n*m,p)
 
-                if self.avgTime == 0:
-                    if printToScreen == True:
-                        print('returning hourly values')
-                    slpAvg = slp_
-                    grdAvg = grd_
-                    datesAvg = dates
+                    if self.avgTime == 0:
+                        if printToScreen == True:
+                            print('returning hourly values')
+                        elif counter == 0:
+                            print('returning hourly values')
+
+                        slpAvg = slp_
+                        grdAvg = grd_
+                        datesAvg = dates
+                    else:
+                        numWindows = int(len(time) / self.avgTime)
+                        if printToScreen == True:
+                            print('averaging every {} hours to {} timesteps'.format(self.avgTime, numWindows))
+                        elif counter == 0:
+                            print('averaging every {} hours to {} timesteps'.format(self.avgTime, numWindows))
+
+                        c = 0
+                        datesAvg = list()
+                        slpAvg = np.empty((n * p, numWindows))
+                        grdAvg = np.empty((n * p, numWindows))
+
+                        for t in range(numWindows):
+                            slpAvg[:, t] = np.nanmean(slp_[:, c:c + self.avgTime], axis=1)
+                            grdAvg[:, t] = np.nanmean(grd_[:, c:c + self.avgTime], axis=1)
+                            datesAvg.append(dates[c])
+                            c = c + self.avgTime
+
+                    # are we reducing the resolution of the grid?
+                    if self.resolution == 0.5:
+                        if printToScreen == True:
+                            print('keeping full 0.5 degree resolution')
+                        elif counter == 0:
+                            print('keeping full 0.5 degree resolution')
+
+                        slpDownscaled = slpAvg
+                        grdDownscaled = grdAvg
+                        xDownscaled = x.flatten()
+                        yDownscaled = y.flatten()
+                        x2 = x
+                        y2 = y
+                    else:
+                        xFlat = x.flatten()
+                        yFlat = y.flatten()
+
+
+                        if self.basin == 'atlantic':
+                            inder = np.where(xFlat < 180)
+                            xFlat[inder] = xFlat[inder] + 360
+
+
+                        xRem = np.fmod(xFlat, self.resolution)
+                        yRem = np.fmod(yFlat, self.resolution)
+                        cc = 0
+                        for pp in range(len(xFlat)):
+                            if xRem[pp] == 0:
+                                if yRem[pp] == 0:
+                                    if cc == 0:
+                                        ind2deg = int(pp)
+                                        cc = cc + 1
+                                    else:
+                                        ind2deg = np.hstack((ind2deg, int(pp)))
+                                        cc = cc + 1
+                        slpDownscaled = slpAvg[ind2deg, :]
+                        grdDownscaled = grdAvg[ind2deg, :]
+                        xDownscaled = xFlat[ind2deg]
+                        yDownscaled = yFlat[ind2deg]
+                        if printToScreen == True:
+                            print('Downscaling to {} degree resolution'.format(self.resolution))
+                            print('{} points rather than {} (full)'.format(len(xDownscaled), len(xFlat)))
+                        elif counter == 0:
+                            print('Downscaling to {} degree resolution'.format(self.resolution))
+                            print('{} points rather than {} (full)'.format(len(xDownscaled), len(xFlat)))
+                        reshapeIndX = np.where((np.diff(xDownscaled) > 4) | (np.diff(xDownscaled) < -4))
+                        reshapeIndY = np.where((np.diff(yDownscaled) < 0))
+                        x2 = xDownscaled.reshape(int(len(reshapeIndY[0]) + 1), int(reshapeIndX[0][0] + 1)).filled()
+                        y2 = yDownscaled.reshape(int(len(reshapeIndY[0]) + 1), int(reshapeIndX[0][0] + 1)).filled()
+
+                    My, Mx = np.shape(y2)
+                    slpMem = slpDownscaled
+                    grdMem = grdDownscaled
+                    datesMem = datesAvg
+
+                    # print('Extracted until {}-{}'.format(year2, month2))
+
+                    from global_land_mask import globe
+                    wrapLons = np.where((x2 > 180))
+                    x2[wrapLons] = x2[wrapLons] - 360
+                    xFlat = x2.flatten()
+                    yFlat = y2.flatten()
+
+                    isOnLandGrid = globe.is_land(y2, x2)
+                    isOnLandFlat = globe.is_land(yFlat, xFlat)
+
+                    x2[wrapLons] = x2[wrapLons] + 360
+                    xFlat = x2.flatten()
+
+                    trimSlps = slpMem[~isOnLandFlat, :]
+                    trimGrds = grdMem[~isOnLandFlat, :]
+
+                    if counter == 0:
+                        SLPS = trimSlps
+                        GRDS = trimGrds
+                        DATES = datesMem
+                    else:
+                        SLPS = np.hstack((SLPS, trimSlps))
+                        GRDS = np.hstack((GRDS, trimGrds))
+                        DATES = np.append(DATES, datesMem)
+
+                    counter = counter + 1
+
                 else:
-                    numWindows = int(len(time) / self.avgTime)
-                    if printToScreen == True:
-                        print('averaging every {} hours to {} timesteps'.format(self.avgTime, numWindows))
-                    c = 0
-                    datesAvg = list()
-                    slpAvg = np.empty((n * p, numWindows))
-                    grdAvg = np.empty((n * p, numWindows))
-                    for t in range(numWindows):
-                        slpAvg[:, t] = np.nanmean(slp_[:, c:c + self.avgTime], axis=1)
-                        grdAvg[:, t] = np.nanmean(grd_[:, c:c + self.avgTime], axis=1)
-                        datesAvg.append(dates[c])
-                        c = c + self.avgTime
 
-                # are we reducing the resolution of the grid?
-                if self.resolution == 0.5:
-                    if printToScreen == True:
-                        print('keeping full 0.5 degree resolution')
-                    slpDownscaled = slpAvg
-                    grdDownscaled = grdAvg
-                    xDownscaled = x.flatten()
-                    yDownscaled = y.flatten()
-                    x2 = x
-                    y2 = y
-                else:
-                    xFlat = x.flatten()
-                    yFlat = y.flatten()
-                    xRem = np.fmod(xFlat, self.resolution)
-                    yRem = np.fmod(yFlat, self.resolution)
-                    cc = 0
-                    for pp in range(len(xFlat)):
-                        if xRem[pp] == 0:
-                            if yRem[pp] == 0:
-                                if cc == 0:
-                                    ind2deg = int(pp)
-                                    cc = cc + 1
-                                else:
-                                    ind2deg = np.hstack((ind2deg, int(pp)))
-                                    cc = cc + 1
-                    slpDownscaled = slpAvg[ind2deg, :]
-                    grdDownscaled = grdAvg[ind2deg, :]
-                    xDownscaled = xFlat[ind2deg]
-                    yDownscaled = yFlat[ind2deg]
-                    if printToScreen == True:
-                        print('Downscaling to {} degree resolution'.format(self.resolution))
-                        print('{} points rather than {} (full)'.format(len(xDownscaled), len(xFlat)))
-                    reshapeIndX = np.where((np.diff(xDownscaled) > 4) | (np.diff(xDownscaled) < -4))
-                    reshapeIndY = np.where((np.diff(yDownscaled) < 0))
-                    x2 = xDownscaled.reshape(int(len(reshapeIndY[0]) + 1), int(reshapeIndX[0] + 1))
-                    y2 = yDownscaled.reshape(int(len(reshapeIndY[0]) + 1), int(reshapeIndX[0] + 1))
-                My, Mx = np.shape(y2)
-                slpMem = slpDownscaled
-                datesMem = datesAvg
-                grdMem = grdDownscaled
+                    for mm in range(2):
+                        if mm == 0:
+                            monthExtract = tt.month - 1
+                            if monthExtract == 0:
+                                monthExtract = 12
+                                yearExtract = tt.year - 1
+                            else:
+                                yearExtract = tt.year
+                        else:
+                            yearExtract = tt.year
+                            monthExtract = tt.month
 
-                # dim, Ntime = np.shape(slpDownscaled)
-                # GrdSlp = np.zeros((np.shape(slpDownscaled)))
-                # for ttt in range(Ntime):
-                #     p = slpDownscaled[:,ttt].reshape(My,Mx)
-                #     dp = np.zeros((np.shape(p)))
-                #     ii = np.arange(1,Mx-1)
-                #     jj = np.arange(1,My-1)
-                #     for iii in ii:
-                #         for jjj in jj:
-                #             phi = np.pi*np.abs(y2[jjj,iii])/180
-                #             dpx1 = (p[jjj,iii] - p[jjj,iii-1])/np.cos(phi)
-                #             dpx2 = (p[jjj,iii+1] - p[jjj,iii])/np.cos(phi)
-                #             dpy1 = p[jjj,iii] - p[jjj-1,iii]
-                #             dpy2 = p[jjj+1,iii] - p[jjj,iii]
-                #             dp[jjj,iii] = (dpx1**2 + dpx2**2 )/2+(dpy1**2 + dpy2**2)/2
-                #     GrdSlp[:,ttt] = dp.flatten()
+                        if (yearExtract == 2011 and monthExtract >= 4) or yearExtract > 2011:
+                            file = self.slpPath + 'prmsl.cdas1.{}{:02d}.grb2.nc'.format(yearExtract,
+                                                                                        monthExtract)
+                            # file = '/users/dylananderson/documents/data/prmsl/prmsl.cdas1.{}{:02d}.grb2.nc'.format(yearExtract,
+                            #                                                                                        monthExtract)
+                        else:
+                            file = self.slpPath + 'prmsl.gdas.{}{:02d}.grb2.nc'.format(yearExtract,
+                                                                                       monthExtract)
+                            # file = '/users/dylananderson/documents/data/prmsl/prmsl.gdas.{}{:02d}.grb2.nc'.format(yearExtract,
+                            #                                                                                       monthExtract)
 
-                # if slpMemory == True:
-                #
-                #     with h5py.File(estelaMat, 'r') as f:
-                #         # for k in f.keys():
-                #         #     print(k)
-                #         Xraw = f['full/Xraw'][:]
-                #         Y = f['full/Y'][:]
-                #         DJF = f['C/traveldays_interp/DJF'][:]
-                #         MAM = f['C/traveldays_interp/MAM'][:]
-                #         JJA = f['C/traveldays_interp/JJA'][:]
-                #         SON = f['C/traveldays_interp/SON'][:]
-                #
-                #
-                #
-                #     X_estela = Xraw
-                #     tempX = np.where(X_estela < 120)
-                #     X_estela[tempX] = X_estela[tempX]+(X_estela[tempX]*0+360)
-                #     estelaX = np.hstack((X_estela[:,600:],X_estela[:,0:600]))
-                #
-                #     Y_estela = Y
-                #     estelaY = np.hstack((Y_estela[:,600:],Y_estela[:,0:600]))
-                #
-                #     #dateTemp = days
-                # if mm == 0:
-                #     slpMem = slpDownscaled
-                #     datesMem = datesAvg
-                # else:
-                #     slpMem = np.hstack((slpMem, slpDownscaled))
-                #     datesMem = np.append(datesMem, datesAvg)
-            # slpMem = slpDownscaled
-            # datesMem = datesAvg
+                        data = Dataset(file)
+                        time = data.variables['valid_date_time']
+                        print('{}-{}'.format(yearExtract, monthExtract))
+
+                        # extract times and turn them into datetimes
+                        # years = np.empty((len(time),))
+                        year = [int(''.join(list(map(lambda x: x.decode('utf-8'), i))).strip()[0:4]) for i in time]
+                        month = [int(''.join(list(map(lambda x: x.decode('utf-8'), i))).strip()[4:6]) for i in time]
+                        day = [int(''.join(list(map(lambda x: x.decode('utf-8'), i))).strip()[6:8]) for i in time]
+                        hour = [int(''.join(list(map(lambda x: x.decode('utf-8'), i))).strip()[8:]) for i in time]
+                        d_vec = np.vstack((year, month, day, hour)).T
+                        dates = [datetime(d[0], d[1], d[2], d[3], 0, 0) for d in d_vec]
+
+                        # Extracting SLP fields, need to account for wrap around international date line
+                        if self.lonLeft > self.lonRight:
+                            # longitud = np.hstack((lon[pos_lon1[0][0]:], lon[0:(pos_lon2[0][0] + 1)]))
+                            slp1 = data.variables['PRMSL_L101'][:, (pos_lat2[0][0]):(pos_lat1[0][0] + 1), (pos_lon1[0][0]):]
+                            slp2 = data.variables['PRMSL_L101'][:, (pos_lat2[0][0]):(pos_lat1[0][0] + 1),
+                                   0:(pos_lon2[0][0] + 1)]
+                            slp = np.concatenate((slp1, slp2), axis=2)
+                        else:
+                            slp = data.variables['PRMSL_L101'][:, (pos_lat2[0][0]):(pos_lat1[0][0] + 1),
+                                  (pos_lon1[0][0]):(pos_lon2[0][0] + 1)]
+                        if mm == 0:
+                            slpCombined = slp
+                            datesCombined = dates
+                        else:
+                            slpCombined = np.concatenate((slpCombined, slp))
+                            datesCombined = np.concatenate((datesCombined, dates))
 
 
-            if counter == 0:
-                SLPS = slpMem
-                GRDS = grdMem
-                DATES = datesMem
-            else:
-                SLPS = np.hstack((SLPS, slpMem))
-                GRDS = np.hstack((GRDS, grdMem))
-                DATES = np.append(DATES, datesMem)
+                    # are we averaging to a shorter time window?
+                    m, n, p = np.shape(slpCombined)
+                    slp_ = np.zeros((n * p, m))
+                    grd_ = np.zeros((n * p, m))
+                    for mmm in range(m):
+                        slp_[:, mmm] = slpCombined[mmm, :, :].flatten()
+                        vgrad = np.gradient(slpCombined[mmm, :, :])
+                        grd_[:, mmm] = np.sqrt(vgrad[0] ** 2 + vgrad[1] ** 2).flatten()
+                    # slp_ = slp.reshape(n*m,p)
 
-            counter = counter + 1
+                    if self.avgTime == 0:
+                        if printToScreen == True:
+                            print('returning hourly values')
+                        slpAvg = slp_
+                        grdAvg = grd_
+                        datesAvg = datesCombined
+                    else:
+                        numWindows = int(len(datesCombined) / self.avgTime)
+                        if printToScreen == True:
+                            print('averaging every {} hours to {} timesteps'.format(self.avgTime, numWindows))
+                        c = 0
+                        datesAvg = list()
+                        slpAvg = np.empty((n * p, numWindows))
+                        grdAvg = np.empty((n * p, numWindows))
+                        for t in range(numWindows):
+                            slpAvg[:, t] = np.nanmean(slp_[:, c:c + self.avgTime], axis=1)
+                            grdAvg[:, t] = np.nanmean(grd_[:, c:c + self.avgTime], axis=1)
+                            datesAvg.append(datesCombined[c])
+                            c = c + self.avgTime
 
-        # vgrad = np.gradient(SLPS)
-        # magGrad = np.sqrt(vgrad[0] ** 2 + vgrad[1] ** 2)
-
-
-        print('Extracted until {}-{}'.format(year2, month2))
-
-        from global_land_mask import globe
-        wrapLons = np.where((x2 > 180))
-        x2[wrapLons] = x2[wrapLons] - 360
-        xFlat = x2.flatten()
-        yFlat = y2.flatten()
-
-        isOnLandGrid = globe.is_land(y2, x2)
-        isOnLandFlat = globe.is_land(yFlat, xFlat)
-
-        x2[wrapLons] = x2[wrapLons] + 360
-        xFlat = x2.flatten()
-
-
-        self.xGrid = x2
-        self.yGrid = y2
-        self.xFlat = xFlat
-        self.yFlat = yFlat
-        self.isOnLandGrid = isOnLandGrid
-        self.isOnLandFlat = isOnLandFlat
-        self.SLPS = SLPS
-        self.GRDS = GRDS
-        self.DATES = DATES
-        self.Mx = Mx
-        self.My = My
-
-        import pickle
-        samplesPickle = 'slps.pickle'
-        outputSamples = {}
-        outputSamples['x2'] = x2
-        outputSamples['y2'] = y2
-        outputSamples['xFlat'] = xFlat
-        outputSamples['yFlat'] = yFlat
-        outputSamples['isOnLandGrid'] = isOnLandGrid
-        outputSamples['isOnLandFlat'] = isOnLandFlat
-        outputSamples['SLPS'] = SLPS
-        outputSamples['GRDS'] = GRDS
-        outputSamples['DATES'] = DATES
-        outputSamples['Mx'] = Mx
-        outputSamples['My'] = My
-
-        with open(os.path.join(self.savePath,samplesPickle), 'wb') as f:
-            pickle.dump(outputSamples, f)
-
-    def pcaOfSlps(self):
-
-        from sklearn.decomposition import PCA
-
-        trimSlps = self.SLPS[~self.isOnLandFlat,:]
-        trimGrds = self.GRDS[~self.isOnLandFlat,:]
-
-
-        SlpGrd = np.hstack((trimSlps.T, trimGrds.T))
-        SlpGrdMean = np.mean(SlpGrd, axis=0)
-        SlpGrdStd = np.std(SlpGrd, axis=0)
-        SlpGrdNorm = (SlpGrd[:, :] - SlpGrdMean) / SlpGrdStd
-        SlpGrdNorm[np.isnan(SlpGrdNorm)] = 0
-
-        # principal components analysis
-        ipca = PCA(n_components=min(SlpGrdNorm.shape[0], SlpGrdNorm.shape[1]))
-        PCs = ipca.fit_transform(SlpGrdNorm)
-        EOFs = ipca.components_
-        variance = ipca.explained_variance_
-        nPercent = variance / np.sum(variance)
-        APEV = np.cumsum(variance) / np.sum(variance) * 100.0
-        nterm = np.where(APEV <= 0.95 * 100)[0][-1]
-
-        self.SlpGrdMean = SlpGrdMean
-        self.SlpGrdStd = SlpGrdStd
-        self.SlpGrdNorm = SlpGrdNorm
-        self.SlpGrd = SlpGrd
-        self.PCs = PCs
-        self.EOFs = EOFs
-        self.variance = variance
-        self.nPercent = nPercent
-        self.APEV = APEV
-        self.nterm = nterm
-
-        import pickle
-        samplesPickle = 'pcas.pickle'
-        outputSamples = {}
-        outputSamples['SlpGrdMean'] = SlpGrdMean
-        outputSamples['SlpGrdStd'] = SlpGrdStd
-        outputSamples['SlpGrdNorm'] = SlpGrdNorm
-        outputSamples['SlpGrd'] = SlpGrd
-        outputSamples['PCs'] = PCs
-        outputSamples['EOFs'] = EOFs
-        outputSamples['variance'] = variance
-        outputSamples['nPercent'] = nPercent
-        outputSamples['APEV'] = APEV
-        outputSamples['nterm'] = nterm
-
-        with open(os.path.join(self.savePath,samplesPickle), 'wb') as f:
-            pickle.dump(outputSamples, f)
-
-    def wtClusters(self,numClusters=49,TCs=True,Basin=b'NA',RG=None,minGroupSize=50,alphaRG=0.1):
-        from functions import sort_cluster_gen_corr_end
-        from sklearn.cluster import KMeans
-        import numpy as np
-        self.numClusters = numClusters
-        PCsub = self.PCs[:, :self.nterm + 1]
-        EOFsub = self.EOFs[:self.nterm + 1, :]
-
-        if TCs == True:
-            print('Downloading the latest IBTRACS data')
-            self.basin = Basin
-            from urllib import request
-            remote_url = 'https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r00/access/netcdf/IBTrACS.ALL.v04r00.nc'
-            opener = request.build_opener()
-            opener.addheaders = [('User-Agent', 'MyApp/1.0')]
-            request.install_opener(opener)
-            file = 'tcs.nc'
-            request.urlretrieve(remote_url, file)
-            import xarray as xr
-            data = xr.open_dataset(file)
-            tcBasin = data['basin']
-            TCtime = data['time'].values
-            TClon = data['lon'].values
-            TClat = data['lat'].values
-            TCpres = data['usa_pres']
-            TCwind = data['usa_wind']
-            import numpy as np
-
-            print('isolating your ocean basin: {}'.format(self.basin))
-
-            indexTC = np.where(tcBasin[:,0]==self.basin)
-            tcTime = TCtime[indexTC[0],:]
-            tcPres = TCpres[indexTC[0],:]
-            tcWind = TCwind[indexTC[0],:]
-            tcLon = TClon[indexTC[0],:]
-            tcLat = TClat[indexTC[0],:]
+                    # are we reducing the resolution of the grid?
+                    if self.resolution == 0.5:
+                        if printToScreen == True:
+                            print('keeping full 0.5 degree resolution')
+                        slpDownscaled = slpAvg
+                        grdDownscaled = grdAvg
+                        xDownscaled = x.flatten()
+                        yDownscaled = y.flatten()
+                        x2 = x
+                        y2 = y
+                    else:
+                        xFlat = x.flatten()
+                        yFlat = y.flatten()
+                        if self.basin == 'atlantic':
+                            inder = np.where(xFlat < 180)
+                            xFlat[inder] = xFlat[inder] + 360
+                        xRem = np.fmod(xFlat, self.resolution)
+                        yRem = np.fmod(yFlat, self.resolution)
+                        cc = 0
+                        for pp in range(len(xFlat)):
+                            if xRem[pp] == 0:
+                                if yRem[pp] == 0:
+                                    if cc == 0:
+                                        ind2deg = int(pp)
+                                        cc = cc + 1
+                                    else:
+                                        ind2deg = np.hstack((ind2deg, int(pp)))
+                                        cc = cc + 1
+                        slpDownscaled = slpAvg[ind2deg, :]
+                        grdDownscaled = grdAvg[ind2deg, :]
+                        xDownscaled = xFlat[ind2deg]
+                        yDownscaled = yFlat[ind2deg]
+                        if printToScreen == True:
+                            print('Downscaling to {} degree resolution'.format(self.resolution))
+                            print('{} points rather than {} (full)'.format(len(xDownscaled), len(xFlat)))
+                        reshapeIndX = np.where((np.diff(xDownscaled) > 4) | (np.diff(xDownscaled) < -4))
+                        reshapeIndY = np.where((np.diff(yDownscaled) < 0))
+                        x2 = xDownscaled.reshape(int(len(reshapeIndY[0]) + 1), int(reshapeIndX[0][0] + 1))
+                        y2 = yDownscaled.reshape(int(len(reshapeIndY[0]) + 1), int(reshapeIndX[0][0] + 1))
+                    My, Mx = np.shape(y2)
 
 
+                    # print('Extracted until {}-{}'.format(year2, month2))
 
+                    from global_land_mask import globe
+                    wrapLons = np.where((x2 > 180))
+                    x2[wrapLons] = x2[wrapLons] - 360
+                    xFlat = x2.flatten()
+                    yFlat = y2.flatten()
 
-            from functions import dt2cal
-            tcAllTime = [dt2cal(dt) for dt in tcTime.flatten()]
-            tcDailyTime = [np.array([d[0],d[1],d[2]]) for d in tcAllTime]
-            # u, idx, counts = np.unique(tcAllTime, axis=0, return_index=True, return_counts=True)
-            allTCtimes = np.unique(tcDailyTime, axis=0, return_index=False, return_counts=False)
-            recentTCs = np.where(allTCtimes[:,0] > 1940)
-            allTCtimes = allTCtimes[recentTCs[0],:]
+                    isOnLandGrid = globe.is_land(y2, x2)
+                    isOnLandFlat = globe.is_land(yFlat, xFlat)
 
-            import datetime
-            def dateDay2datetime(d_vec):
-                '''
-                Returns datetime list from a datevec matrix
-                d_vec = [[y1 m1 d1 H1 M1],[y2 ,2 d2 H2 M2],..]
-                '''
-                return [datetime.datetime(d[0], d[1], d[2]) for d in d_vec]
+                    x2[wrapLons] = x2[wrapLons] + 360
+                    xFlat = x2.flatten()
 
-            def dateDay2datetimeDate(d_vec):
-                '''
-                Returns datetime list from a datevec matrix
-                d_vec = [[y1 m1 d1 H1 M1],[y2 ,2 d2 H2 M2],..]
-                '''
-                return [datetime.date(d[0], d[1], d[2]) for d in d_vec]
+                    if estelaMat == None:
+                        print('you want to use ESTELA memory but did not provide a path to the data')
+                    else:
+                        from scipy.interpolate import RegularGridInterpolator as RGI
+                        import h5py
+                        with h5py.File(estelaMat, 'r') as f:
+                            Xraw = f['full/Xraw'][:]
+                            Y = f['full/Y'][:]
+                            DJF = f['C/traveldays_interp/DJF'][:]
+                            MAM = f['C/traveldays_interp/MAM'][:]
+                            JJA = f['C/traveldays_interp/JJA'][:]
+                            SON = f['C/traveldays_interp/SON'][:]
 
-            def datetime2datetimeDate(d_vec):
-                '''
-                Returns datetime list from a datevec matrix
-                d_vec = [[y1 m1 d1 H1 M1],[y2 ,2 d2 H2 M2],..]
-                '''
-                return [datetime.date(d.year, d.month, d.day) for d in d_vec]
+                        if self.basin == 'atlantic':
+                            X_estela = np.copy(Xraw)
+                            temp = np.where(Xraw < 40)
+                            X_estela[temp] = X_estela[temp] + 360
+                            X_estela = np.roll(X_estela, 440, axis=1)
+                            Y_estela = np.copy(Y)
+                            Y_estela = np.roll(Y_estela, 440, axis=1)
+                        else:
+                            X_estela = np.copy(Xraw)
+                            temp = np.where(Xraw < 0)
+                            X_estela[temp] = X_estela[temp] + 360
+                            X_estela = np.roll(X_estela, 360, axis=1)
+                            Y_estela = np.copy(Y)
+                            Y_estela = np.roll(Y_estela, 360, axis=1)
 
-            allTCtimes = np.asarray(dateDay2datetime(allTCtimes))
-            import pandas as pd
-            df = pd.DataFrame(allTCtimes, columns=['date'])
-            dropDups = df.drop_duplicates('date')
+                        sind = np.where(np.asarray(datesAvg) == tt)
+                        datesMem = np.asarray(datesAvg)[sind[0][0]:]
+                        monE = datesMem[0].month
+                        if monE <= 2 or monE == 12:
+                            W = DJF  # C['traveldays_interp']['DJF']
+                        elif 3 <= monE <= 5:
+                            W = MAM  # C['traveldays_interp']['MAM']
+                        elif 6 <= monE <= 8:
+                            W = JJA  # C['traveldays_interp']['JJA']
+                        else:
+                            W = SON  # C['traveldays_interp']['SON']
 
-            tcDates = dropDups['date'].dt.date.tolist()
-            slpDates = datetime2datetimeDate(self.DATES)
-            overlap = [x for x in slpDates if x in tcDates]
+                        if self.basin == 'atlantic':
+                            W2 = np.roll(W, 280, axis=1)
+                        else:
+                            W2 = np.roll(W, 360, axis=1)
 
-            ind_dict = dict((k, i) for i, k in enumerate(slpDates))
-            inter = set(slpDates).intersection(tcDates)
-            indices = [ind_dict[x] for x in inter]
-            indices.sort()
+                        points = (np.unique(Y_estela.flatten()), np.unique(X_estela.flatten()),)
+                        interpF = RGI(points, W2)
+                        intPoints = (y2, x2)
+                        temp_interp = interpF(intPoints)
+                        if self.avgTime == 0:
+                            tempRounded = ceilPartial(temp_interp, 1 / 24)
+                            multiplier = 24
+                        else:
+                            tempRounded = ceilPartial(temp_interp, self.avgTime / 24)
+                            multiplier = 24 / self.avgTime
 
-            mask = np.ones(len(self.PCs), bool)
-            mask[indices] = 0
-            pcLess = PCsub[mask,:]
+                        xvector = x2.flatten()
+                        yvector = y2.flatten()
+                        travelv = tempRounded.flatten()
 
-            mask2 = np.zeros(len(self.PCs), np.bool)
-            mask2[indices] = 1
-            pcTCs = PCsub[mask2,:]
+                        slpMem = np.nan * np.ones((len(slpDownscaled), len(datesMem)))
+                        grdMem = np.nan * np.ones((len(grdDownscaled), len(datesMem)))
 
-            print('clustering Extra Tropical Days')
-            self.num_clustersETC = 49
-            kma = KMeans(n_clusters=self.num_clustersETC, n_init=2000).fit(pcLess)
-            # groupsize
-            _, group_sizeETC = np.unique(kma.labels_, return_counts=True)
+                        for ff in range(len(datesMem)):
+                            madeup_slp = np.nan * np.ones((len(travelv),))
+                            madeup_grd = np.nan * np.ones((len(travelv),))
+                            for hh in range(int(25 * multiplier)):
+                                # print('{}'.format(hh/multiplier+1/multiplier))
+                                indexIso = np.where(travelv == (hh / multiplier + 1 / multiplier))
+                                madeup_slp[indexIso] = slpDownscaled[indexIso, ff + sind[0][0] - hh]
+                                madeup_grd[indexIso] = grdDownscaled[indexIso, ff + sind[0][0] - hh]
 
-            # groups
-            d_groupsETC = {}
-            for k in range(self.num_clustersETC):
-                d_groupsETC['{0}'.format(k)] = np.where(kma.labels_ == k)
+                            indexIso = np.where(travelv > (hh / multiplier + 1 / multiplier))
+                            madeup_slp[indexIso] = slpDownscaled[indexIso, ff + sind[0][0] - hh]
+                            madeup_grd[indexIso] = grdDownscaled[indexIso, ff + sind[0][0] - hh]
 
-            self.groupSizeETC = group_sizeETC
-            self.dGroupsETC = d_groupsETC
-            # centroids
-            self.centroidsETC = np.dot(kma.cluster_centers_, EOFsub)
-            # km, x and var_centers
-            self.kmETC = np.multiply(
-                self.centroidsETC,
-                np.tile(self.SlpGrdStd, (self.num_clustersETC, 1))
-            ) + np.tile(self.SlpGrdMean, (self.num_clustersETC, 1))
-            # sort kmeans
-            kma_order = sort_cluster_gen_corr_end(kma.cluster_centers_, numClusters)
-            self.kmaOrderETC = kma_order
-            bmus_corrected = np.zeros((len(kma.labels_),), ) * np.nan
-            for i in range(self.num_clustersETC):
-                posc = np.where(kma.labels_ == kma_order[i])
-                bmus_corrected[posc] = i
-            self.bmus_correctedETC = bmus_corrected
-            # reorder centroids
-            self.sorted_cenEOFsETC = kma.cluster_centers_[kma_order, :]
-            self.sorted_centroidsETC = self.centroidsETC[kma_order, :]
+                            slpMem[:, ff] = madeup_slp
+                            grdMem[:, ff] = madeup_grd
 
-            repmatStd = np.tile(self.SlpGrdStd, (self.num_clustersETC, 1))
-            repmatMean = np.tile(self.SlpGrdMean, (self.num_clustersETC, 1))
-            self.Km_ETC = np.multiply(self.sorted_centroidsETC, repmatStd) + repmatMean
+                        trimSlps = slpMem[~isOnLandFlat, :]
+                        trimGrds = grdMem[~isOnLandFlat, :]
 
-            print('clustering Tropical Cyclone Days')
+                        if counter == 0:
+                            SLPS = trimSlps
+                            GRDS = trimGrds
+                            DATES = datesMem
+                        else:
+                            SLPS = np.hstack((SLPS, trimSlps))
+                            GRDS = np.hstack((GRDS, trimGrds))
+                            DATES = np.append(DATES, datesMem)
 
-            self.num_clustersTC = 21
-            kma = KMeans(n_clusters=self.num_clustersTC, n_init=2000).fit(pcTCs)
-            # groupsize
-            _, group_sizeTC = np.unique(kma.labels_, return_counts=True)
-            # groups
-            d_groupsTC = {}
-            for k in range(self.num_clustersTC):
-                d_groupsTC['{0}'.format(k)] = np.where(kma.labels_ == k)
-            self.groupSizeTC = group_sizeTC
-            self.dGroupsTC = d_groupsTC
-            # centroids
-            self.centroidsTC = np.dot(kma.cluster_centers_, EOFsub)
-            # km, x and var_centers
-            self.kmTC = np.multiply(
-                self.centroidsTC,
-                np.tile(self.SlpGrdStd, (self.num_clustersTC, 1))
-            ) + np.tile(self.SlpGrdMean, (self.num_clustersTC, 1))
-            self.bmusTC = kma.labels_+49
-            repmatStd = np.tile(self.SlpGrdStd, (self.num_clustersTC, 1))
-            repmatMean = np.tile(self.SlpGrdMean, (self.num_clustersTC, 1))
-            self.Km_TC = np.multiply(self.centroidsTC, repmatStd) + repmatMean
-            self.cenEOFsTC = kma.cluster_centers_
+                        counter = counter + 1
 
-
-            self.bmus = np.nan * np.ones((len(self.PCs)))
-            self.bmus[mask] = self.bmus_correctedETC
-            self.bmus[mask2] = self.bmusTC
-            self.bmus_corrected = self.bmus
+            self.xGrid = x2
+            self.yGrid = y2
+            self.xFlat = xFlat
+            self.yFlat = yFlat
+            self.isOnLandGrid = isOnLandGrid
+            self.isOnLandFlat = isOnLandFlat
+            self.SLPS = SLPS
+            self.GRDS = GRDS
+            self.DATES = DATES
+            self.Mx = Mx
+            self.My = My
 
             import pickle
-            samplesPickle = 'dwts.pickle'
+            samplesPickle = 'slps.pickle'
             outputSamples = {}
-            outputSamples['bmus'] = self.bmus
-            outputSamples['Km_ETC'] = self.Km_ETC
-            outputSamples['sorted_centroidsETC'] = self.sorted_centroidsETC
-            outputSamples['sorted_cenEOFsETC'] = self.sorted_cenEOFsETC
-            outputSamples['bmus_correctedETC'] = self.bmus_correctedETC
-            outputSamples['kmaOrderETC'] = self.kmaOrderETC
-            outputSamples['dGroupsETC'] = self.dGroupsETC
-            outputSamples['groupSizeETC'] = self.groupSizeETC
-            # outputSamples['numClustersETC'] = self.numClusters
-            outputSamples['numClustersETC'] = self.num_clustersETC
-            outputSamples['Km_TC'] = self.Km_TC
-            outputSamples['sorted_centroidsTC'] = self.centroidsTC
-            outputSamples['sorted_cenEOFsTC'] = self.cenEOFsTC
-            outputSamples['bmus_correctedTC'] = self.bmusTC
-            # outputSamples['kmaOrderTC'] = self.kmaOrderTC
-            outputSamples['dGroupsTC'] = self.dGroupsTC
-            outputSamples['groupSizeTC'] = self.groupSizeTC
-            outputSamples['numClustersTC'] = self.num_clustersTC
-            outputSamples['bmus_corrected'] = self.bmus_corrected
+            outputSamples['x2'] = x2
+            outputSamples['y2'] = y2
+            outputSamples['xFlat'] = xFlat
+            outputSamples['yFlat'] = yFlat
+            outputSamples['isOnLandGrid'] = isOnLandGrid
+            outputSamples['isOnLandFlat'] = isOnLandFlat
+            outputSamples['SLPS'] = SLPS
+            outputSamples['GRDS'] = GRDS
+            outputSamples['DATES'] = DATES
+            outputSamples['Mx'] = Mx
+            outputSamples['My'] = My
 
             with open(os.path.join(self.savePath,samplesPickle), 'wb') as f:
                 pickle.dump(outputSamples, f)
 
+    def pcaOfSlps(self,loadPrior=False,loadPickle='./'):
 
+        if loadPrior==True:
+            import pickle
+            with open(loadPickle, "rb") as input_file:
+                pcas = pickle.load(input_file)
+            self.SlpGrdMean = pcas['SlpGrdMean']
+            self.SlpGrdStd = pcas['SlpGrdStd']
+            self.SlpGrdNorm = pcas['SlpGrdNorm']
+            self.SlpGrd = pcas['SlpGrd']
+            self.PCs = pcas['PCs']
+            self.EOFs = pcas['EOFs']
+            self.variance = pcas['variance']
+            self.nPercent = pcas['nPercent']
+            self.APEV = pcas['APEV']
+            self.nterm = pcas['nterm']
+            print('loaded prior PCA processing')
 
 
         else:
 
-            if RG == 'seasonal':
-                self.minGroupSize=minGroupSize
+            from sklearn.decomposition import PCA
 
-                dayOfYear = np.array([hh.timetuple().tm_yday for hh in self.DATES])  # returns 1 for January 1st
-                dayOfYearSine = np.sin(2 * np.pi / 366 * dayOfYear)
-                dayOfYearCosine = np.cos(2 * np.pi / 366 * dayOfYear)
+            trimSlps = self.SLPS
+            trimGrds = self.GRDS
 
-                PCsub_std = np.std(PCsub, axis=0)
-                PCsub_norm = np.divide(PCsub, PCsub_std)
+            SlpGrd = np.hstack((trimSlps.T, trimGrds.T))
+            SlpGrdMean = np.mean(SlpGrd, axis=0)
+            SlpGrdStd = np.std(SlpGrd, axis=0)
+            SlpGrdNorm = (SlpGrd[:, :] - SlpGrdMean) / SlpGrdStd
+            SlpGrdNorm[np.isnan(SlpGrdNorm)] = 0
 
-                X = PCsub_norm  #  predictor
-
-                wd = np.vstack((dayOfYearSine, dayOfYearCosine)).T
-
-                wd_std = np.nanstd(wd, axis=0)
-                wd_norm = np.divide(wd, wd_std)
-
-                Y = wd_norm  # predictand
-
-                # Adjust
-                [n, d] = Y.shape
-                X = np.concatenate((np.ones((n, 1)), X), axis=1)
-                from sklearn import linear_model
-
-                clf = linear_model.LinearRegression(fit_intercept=True)
-                Ymod = np.zeros((n, d)) * np.nan
-                for i in range(d):
-                    clf.fit(X, Y[:, i])
-                    beta = clf.coef_
-                    intercept = clf.intercept_
-                    Ymod[:, i] = np.ones((n,)) * intercept
-                    for j in range(len(beta)):
-                        Ymod[:, i] = Ymod[:, i] + beta[j] * X[:, j]
-
-                # de-scale
-                Ym = np.multiply(Ymod, wd_std)
-
-                alpha = alphaRG
-                # append Yregres data to PCs
-                data = np.concatenate((PCsub, Ym), axis=1)
-                data_std = np.std(data, axis=0)
-                data_mean = np.mean(data, axis=0)
-
-                #  normalize but keep PCs weigth
-                data_norm = np.ones(data.shape) * np.nan
-                for i in range(PCsub.shape[1]):
-                    data_norm[:, i] = np.divide(data[:, i] - data_mean[i], data_std[0])
-                for i in range(PCsub.shape[1], data.shape[1]):
-                    data_norm[:, i] = np.divide(data[:, i] - data_mean[i], data_std[i])
-
-                # apply alpha (PCs - Yregress weight)
-                data_a = np.concatenate(
-                    ((1 - alpha) * data_norm[:, :self.nterm],
-                     alpha * data_norm[:, self.nterm:]),
-                    axis=1
-                )
-
-                #  KMeans
-                keep_iter = True
-                count_iter = 0
-                while keep_iter:
-                    # n_init: number of times KMeans runs with different centroids seeds
-                    kma = KMeans(n_clusters=self.numClusters, n_init=100).fit(data_a)
-
-                    #  check minimun group_size
-                    group_keys, group_size = np.unique(kma.labels_, return_counts=True)
-
-                    # sort output
-                    group_k_s = np.column_stack([group_keys, group_size])
-                    group_k_s = group_k_s[group_k_s[:, 0].argsort()]  # sort by cluster num
-
-                    if not self.minGroupSize:
-                        keep_iter = False
-
-                    else:
-                        # keep iterating?
-                        keep_iter = np.where(group_k_s[:, 1] < self.minGroupSize)[0].any()
-                        count_iter += 1
-
-                        # log kma iteration
-                        print('KMA iteration info:')
-                        for rr in group_k_s:
-                            print('  cluster: {0}, size: {1}'.format(rr[0], rr[1]))
-                        print('Try again: ', keep_iter)
-                        print('Total attemps: ', count_iter)
-                        print()
+            # principal components analysis
+            ipca = PCA(n_components=min(SlpGrdNorm.shape[0], SlpGrdNorm.shape[1]))
+            PCs = ipca.fit_transform(SlpGrdNorm)
+            EOFs = ipca.components_
+            variance = ipca.explained_variance_
+            nPercent = variance / np.sum(variance)
+            APEV = np.cumsum(variance) / np.sum(variance) * 100.0
+            nterm = np.where(APEV <= 0.95 * 100)[0][-1]
 
 
 
+            import pickle
+            samplesPickle = 'pcas.pickle'
+            outputSamples = {}
+            outputSamples['SlpGrdMean'] = SlpGrdMean
+            outputSamples['SlpGrdStd'] = SlpGrdStd
+            outputSamples['SlpGrdNorm'] = SlpGrdNorm
+            outputSamples['SlpGrd'] = SlpGrd
+            outputSamples['PCs'] = PCs
+            outputSamples['EOFs'] = EOFs
+            outputSamples['variance'] = variance
+            outputSamples['nPercent'] = nPercent
+            outputSamples['APEV'] = APEV
+            outputSamples['nterm'] = nterm
+
+            with open(os.path.join(self.savePath,samplesPickle), 'wb') as f:
+                pickle.dump(outputSamples, f)
+
+
+    def wtClusters(self,numClusters=49,TCs=True,Basin=b'NA',RG=None,minGroupSize=50,alphaRG=0.1,met=None,loadPrior=False,loadPickle='./'):
+
+        if loadPrior == True:
+            import numpy as np
+            import pickle
+            with open(loadPickle, "rb") as input_file:
+                dwts = pickle.load(input_file)
+
+            self.Km_ETC = dwts['Km_ETC']
+            self.bmus = dwts['bmus']
+            self.sorted_centroidsETC = dwts['sorted_centroidsETC']
+            self.sorted_cenEOFsETC = dwts['sorted_cenEOFsETC']
+            self.bmus_correctedETC = dwts['bmus_correctedETC']
+            self.kmaOrderETC = dwts['kmaOrderETC']
+            self.dGroupsETC = dwts['dGroupsETC']
+            self.groupSizeETC = dwts['groupSizeETC']
+            self.numClustersETC = dwts['numClustersETC']
+            self.bmus_corrected = dwts['bmus_corrected']
+            self.windowHs = dwts['windowHs']
+            self.windowTp = dwts['windowTp']
+            self.numClusters = np.nanmax(dwts['numClustersETC'])
+
+            print('loaded prior DWT processing')
+
+        else:
+
+            from functions import sort_cluster_gen_corr_end
+            from sklearn.cluster import KMeans
+            import numpy as np
+            self.numClusters = numClusters
+            PCsub = self.PCs[:, :self.nterm + 1]
+            EOFsub = self.EOFs[:self.nterm + 1, :]
+
+            if TCs == True:
+                print('Downloading the latest IBTRACS data')
+                self.basin = Basin
+                from urllib import request
+                remote_url = 'https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r00/access/netcdf/IBTrACS.ALL.v04r00.nc'
+                opener = request.build_opener()
+                opener.addheaders = [('User-Agent', 'MyApp/1.0')]
+                request.install_opener(opener)
+                file = 'tcs.nc'
+                request.urlretrieve(remote_url, file)
+                import xarray as xr
+                data = xr.open_dataset(file)
+                tcBasin = data['basin']
+                TCtime = data['time'].values
+                # TClon = data['lon'].values
+                # TClat = data['lat'].values
+                # TCpres = data['usa_pres']
+                # TCwind = data['usa_wind']
+                import numpy as np
+
+                print('isolating your ocean basin: {}'.format(self.basin))
+
+                indexTC = np.where(tcBasin[:,0]==self.basin)
+                tcTime = TCtime[indexTC[0],:]
+                # tcPres = TCpres[indexTC[0],:]
+                # tcWind = TCwind[indexTC[0],:]
+                # tcLon = TClon[indexTC[0],:]
+                # tcLat = TClat[indexTC[0],:]
+
+                from functions import dt2cal
+                tcAllTime = [dt2cal(dt) for dt in tcTime.flatten()]
+                tcDailyTime = [np.array([d[0],d[1],d[2]]) for d in tcAllTime]
+                # u, idx, counts = np.unique(tcAllTime, axis=0, return_index=True, return_counts=True)
+                allTCtimes = np.unique(tcDailyTime, axis=0, return_index=False, return_counts=False)
+                recentTCs = np.where(allTCtimes[:,0] > 1940)
+                allTCtimes = allTCtimes[recentTCs[0],:]
+
+                import datetime
+                def dateDay2datetime(d_vec):
+                    '''
+                    Returns datetime list from a datevec matrix
+                    d_vec = [[y1 m1 d1 H1 M1],[y2 ,2 d2 H2 M2],..]
+                    '''
+                    return [datetime.datetime(d[0], d[1], d[2]) for d in d_vec]
+
+                def dateDay2datetimeDate(d_vec):
+                    '''
+                    Returns datetime list from a datevec matrix
+                    d_vec = [[y1 m1 d1 H1 M1],[y2 ,2 d2 H2 M2],..]
+                    '''
+                    return [datetime.date(d[0], d[1], d[2]) for d in d_vec]
+
+                def datetime2datetimeDate(d_vec):
+                    '''
+                    Returns datetime list from a datevec matrix
+                    d_vec = [[y1 m1 d1 H1 M1],[y2 ,2 d2 H2 M2],..]
+                    '''
+                    return [datetime.date(d.year, d.month, d.day) for d in d_vec]
+
+                allTCtimes = np.asarray(dateDay2datetime(allTCtimes))
+                import pandas as pd
+                df = pd.DataFrame(allTCtimes, columns=['date'])
+                dropDups = df.drop_duplicates('date')
+
+                tcDates = dropDups['date'].dt.date.tolist()
+                slpDates = datetime2datetimeDate(self.DATES)
+                overlap = [x for x in slpDates if x in tcDates]
+
+                ind_dict = dict((k, i) for i, k in enumerate(slpDates))
+                inter = set(slpDates).intersection(tcDates)
+                indices = [ind_dict[x] for x in inter]
+                indices.sort()
+
+                mask = np.ones(len(self.PCs), bool)
+                mask[indices] = 0
+                pcLess = PCsub[mask,:]
+
+                mask2 = np.zeros(len(self.PCs), np.bool)
+                mask2[indices] = 1
+                pcTCs = PCsub[mask2,:]
+
+                print('clustering Extra Tropical Days')
+                self.num_clustersETC = 49
+                kma = KMeans(n_clusters=self.num_clustersETC, n_init=2000).fit(pcLess)
                 # groupsize
                 _, group_sizeETC = np.unique(kma.labels_, return_counts=True)
+
                 # groups
                 d_groupsETC = {}
-                for k in range(numClusters):
+                for k in range(self.num_clustersETC):
                     d_groupsETC['{0}'.format(k)] = np.where(kma.labels_ == k)
+
                 self.groupSizeETC = group_sizeETC
                 self.dGroupsETC = d_groupsETC
                 # centroids
-                # centroids = np.dot(kma.cluster_centers_, EOFsub)
-
-                centroids = np.zeros((self.numClusters, EOFsub.shape[1]))  # PCsub.shape[1]))
-                for k in range(self.numClusters):
-                    centroids[k, :] = np.dot(np.mean(PCsub[d_groupsETC['{0}'.format(k)], :], axis=1), EOFsub)
-
-
+                self.centroidsETC = np.dot(kma.cluster_centers_, EOFsub)
                 # km, x and var_centers
-                km = np.multiply(
-                    centroids,
-                    np.tile(self.SlpGrdStd, (self.numClusters, 1))
-                ) + np.tile(self.SlpGrdMean, (self.numClusters, 1))
-                # sort kmeans
-                kma_order = sort_cluster_gen_corr_end(kma.cluster_centers_, self.numClusters)
-                self.kmaOrderETC = kma_order
-                bmus_corrected = np.zeros((len(kma.labels_),), ) * np.nan
-                for i in range(self.numClusters):
-                    posc = np.where(kma.labels_ == kma_order[i])
-                    bmus_corrected[posc] = i
-                self.bmus_correctedETC = bmus_corrected
-                # reorder centroids
-                self.sorted_cenEOFsETC = kma.cluster_centers_[kma_order, :]
-                self.sorted_centroidsETC = centroids[kma_order, :]
-
-                repmatStd = np.tile(self.SlpGrdStd, (numClusters, 1))
-                repmatMean = np.tile(self.SlpGrdMean, (numClusters, 1))
-                self.Km_ETC = np.multiply(self.sorted_centroidsETC, repmatStd) + repmatMean
-                self.bmus = self.bmus_correctedETC
-                self.bmus_corrected = self.bmus_correctedETC
-
-
-            else:
-                kma = KMeans(n_clusters=numClusters, n_init=2000).fit(PCsub)
-                # groupsize
-                _, group_sizeETC = np.unique(kma.labels_, return_counts=True)
-                # groups
-                d_groupsETC = {}
-                for k in range(numClusters):
-                    d_groupsETC['{0}'.format(k)] = np.where(kma.labels_ == k)
-                self.groupSizeETC = group_sizeETC
-                self.dGroupsETC = d_groupsETC
-                # centroids
-                centroids = np.dot(kma.cluster_centers_, EOFsub)
-                # km, x and var_centers
-                km = np.multiply(
-                    centroids,
-                    np.tile(self.SlpGrdStd, (numClusters, 1))
-                ) + np.tile(self.SlpGrdMean, (numClusters, 1))
+                self.kmETC = np.multiply(
+                    self.centroidsETC,
+                    np.tile(self.SlpGrdStd, (self.num_clustersETC, 1))
+                ) + np.tile(self.SlpGrdMean, (self.num_clustersETC, 1))
                 # sort kmeans
                 kma_order = sort_cluster_gen_corr_end(kma.cluster_centers_, numClusters)
                 self.kmaOrderETC = kma_order
                 bmus_corrected = np.zeros((len(kma.labels_),), ) * np.nan
-                for i in range(numClusters):
+                for i in range(self.num_clustersETC):
                     posc = np.where(kma.labels_ == kma_order[i])
                     bmus_corrected[posc] = i
                 self.bmus_correctedETC = bmus_corrected
                 # reorder centroids
                 self.sorted_cenEOFsETC = kma.cluster_centers_[kma_order, :]
-                self.sorted_centroidsETC = centroids[kma_order, :]
+                self.sorted_centroidsETC = self.centroidsETC[kma_order, :]
 
-                repmatStd = np.tile(self.SlpGrdStd, (numClusters, 1))
-                repmatMean = np.tile(self.SlpGrdMean, (numClusters, 1))
+                repmatStd = np.tile(self.SlpGrdStd, (self.num_clustersETC, 1))
+                repmatMean = np.tile(self.SlpGrdMean, (self.num_clustersETC, 1))
                 self.Km_ETC = np.multiply(self.sorted_centroidsETC, repmatStd) + repmatMean
-                self.bmus = self.bmus_correctedETC
+
+                print('clustering Tropical Cyclone Days')
+
+                self.num_clustersTC = 21
+                kma = KMeans(n_clusters=self.num_clustersTC, n_init=2000).fit(pcTCs)
+                # groupsize
+                _, group_sizeTC = np.unique(kma.labels_, return_counts=True)
+                # groups
+                d_groupsTC = {}
+                for k in range(self.num_clustersTC):
+                    d_groupsTC['{0}'.format(k)] = np.where(kma.labels_ == k)
+                self.groupSizeTC = group_sizeTC
+                self.dGroupsTC = d_groupsTC
+                # centroids
+                self.centroidsTC = np.dot(kma.cluster_centers_, EOFsub)
+                # km, x and var_centers
+                self.kmTC = np.multiply(
+                    self.centroidsTC,
+                    np.tile(self.SlpGrdStd, (self.num_clustersTC, 1))
+                ) + np.tile(self.SlpGrdMean, (self.num_clustersTC, 1))
+                self.bmusTC = kma.labels_+49
+                repmatStd = np.tile(self.SlpGrdStd, (self.num_clustersTC, 1))
+                repmatMean = np.tile(self.SlpGrdMean, (self.num_clustersTC, 1))
+                self.Km_TC = np.multiply(self.centroidsTC, repmatStd) + repmatMean
+                self.cenEOFsTC = kma.cluster_centers_
 
 
-            import pickle
-            samplesPickle = 'dwts.pickle'
-            outputSamples = {}
-            outputSamples['Km_ETC'] = self.Km_ETC
-            outputSamples['bmus'] = self.bmus
-            outputSamples['sorted_centroidsETC'] = self.sorted_centroidsETC
-            outputSamples['sorted_cenEOFsETC'] = self.sorted_cenEOFsETC
-            outputSamples['bmus_correctedETC'] = self.bmus_correctedETC
-            outputSamples['kmaOrderETC'] = self.kmaOrderETC
-            outputSamples['dGroupsETC'] = self.dGroupsETC
-            outputSamples['groupSizeETC'] = self.groupSizeETC
-            outputSamples['numClustersETC'] = self.numClusters
-            outputSamples['bmus_corrected'] = self.bmus_correctedETC
+                self.bmus = np.nan * np.ones((len(self.PCs)))
+                self.bmus[mask] = self.bmus_correctedETC
+                self.bmus[mask2] = self.bmusTC
+                self.bmus_corrected = self.bmus
 
-            with open(os.path.join(self.savePath,samplesPickle), 'wb') as f:
-                pickle.dump(outputSamples, f)
+                import pickle
+                samplesPickle = 'dwts.pickle'
+                outputSamples = {}
+                outputSamples['bmus'] = self.bmus
+                outputSamples['Km_ETC'] = self.Km_ETC
+                outputSamples['sorted_centroidsETC'] = self.sorted_centroidsETC
+                outputSamples['sorted_cenEOFsETC'] = self.sorted_cenEOFsETC
+                outputSamples['bmus_correctedETC'] = self.bmus_correctedETC
+                outputSamples['kmaOrderETC'] = self.kmaOrderETC
+                outputSamples['dGroupsETC'] = self.dGroupsETC
+                outputSamples['groupSizeETC'] = self.groupSizeETC
+                # outputSamples['numClustersETC'] = self.numClusters
+                outputSamples['numClustersETC'] = self.num_clustersETC
+                outputSamples['Km_TC'] = self.Km_TC
+                outputSamples['sorted_centroidsTC'] = self.centroidsTC
+                outputSamples['sorted_cenEOFsTC'] = self.cenEOFsTC
+                outputSamples['bmus_correctedTC'] = self.bmusTC
+                # outputSamples['kmaOrderTC'] = self.kmaOrderTC
+                outputSamples['dGroupsTC'] = self.dGroupsTC
+                outputSamples['groupSizeTC'] = self.groupSizeTC
+                outputSamples['numClustersTC'] = self.num_clustersTC
+                outputSamples['bmus_corrected'] = self.bmus_corrected
+
+                with open(os.path.join(self.savePath,samplesPickle), 'wb') as f:
+                    pickle.dump(outputSamples, f)
+
+
+
+
+            else:
+
+                if RG == 'waves':
+                    self.minGroupSize = minGroupSize
+                    windowHs = []
+                    windowTp = []
+                    for qq in range(len(self.DATES)-1):
+                        if np.remainder(qq,5000) == 0:
+                            print('done up to {}'.format(self.DATES[qq]))
+                        windowIndex = np.where((met.timeWave > self.DATES[qq]) & (met.timeWave < self.DATES[qq+1]))
+                        if len(windowIndex[0])>0:
+                            windowHs.append(np.max(met.Hs[windowIndex]))
+                            windowTp.append(np.mean(met.Tp[windowIndex]))
+                        else:
+                            windowHs.append(np.nan)
+                            windowTp.append(np.nan)
+
+                    self.windowHs = np.asarray(windowHs)
+                    self.windowTp = np.asarray(windowTp)
+
+                    nanInds = np.where(~np.isnan(windowHs))
+                    # PCsub = PCsub[nanInds[0],:]
+                    PCsub_std = np.std(PCsub[nanInds[0],:], axis=0)
+                    PCsub_norm = np.divide(PCsub[nanInds[0],:], PCsub_std)
+                    PCsub_std_pred = np.std(PCsub, axis=0)
+                    PCsub_norm_pred = np.divide(PCsub, PCsub_std_pred)
+                    X_fit = PCsub_norm  #  predictor
+                    X_pred = PCsub_norm_pred  #  predictor
+
+                    wd = np.vstack((np.asarray(windowHs)[nanInds], np.asarray(windowTp)[nanInds])).T
+                    wd_std = np.nanstd(wd, axis=0)
+                    wd_norm = np.divide(wd, wd_std)
+
+                    Y = wd_norm  # predictand
+
+                    # Adjust
+                    [n, d] = Y.shape
+                    X_fit = np.concatenate((np.ones((n, 1)), X_fit), axis=1)
+                    [n2, d2] = X_pred.shape
+                    X_pred = np.concatenate((np.ones((n2, 1)), X_pred), axis=1)
+
+                    from sklearn import linear_model
+
+                    clf = linear_model.LinearRegression(fit_intercept=True)
+                    Ymod = np.zeros((n2, d)) * np.nan
+                    for i in range(d):
+                        clf.fit(X_fit, Y[:, i])
+                        beta = clf.coef_
+                        intercept = clf.intercept_
+                        Ymod[:, i] = np.ones((n2,)) * intercept
+                        for j in range(len(beta)):
+                            Ymod[:, i] = Ymod[:, i] + beta[j] * X_pred[:, j]
+
+                    # de-scale
+                    Ym = np.multiply(Ymod, wd_std)
+
+                    alpha = alphaRG
+                    # append Yregres data to PCs
+                    data = np.concatenate((PCsub, Ym), axis=1)
+                    data_std = np.std(data, axis=0)
+                    data_mean = np.mean(data, axis=0)
+
+                    #  normalize but keep PCs weigth
+                    data_norm = np.ones(data.shape) * np.nan
+                    for i in range(PCsub.shape[1]):
+                        data_norm[:, i] = np.divide(data[:, i] - data_mean[i], data_std[0])
+                    for i in range(PCsub.shape[1], data.shape[1]):
+                        data_norm[:, i] = np.divide(data[:, i] - data_mean[i], data_std[i])
+
+                    # apply alpha (PCs - Yregress weight)
+                    data_a = np.concatenate(
+                        ((1 - alpha) * data_norm[:, :self.nterm],
+                         alpha * data_norm[:, self.nterm:]),
+                        axis=1
+                    )
+
+                    #  KMeans
+                    keep_iter = True
+                    count_iter = 0
+                    while keep_iter:
+                        # n_init: number of times KMeans runs with different centroids seeds
+                        kma = KMeans(n_clusters=self.numClusters, n_init=100).fit(data_a)
+
+                        #  check minimun group_size
+                        group_keys, group_size = np.unique(kma.labels_, return_counts=True)
+
+                        # sort output
+                        group_k_s = np.column_stack([group_keys, group_size])
+                        group_k_s = group_k_s[group_k_s[:, 0].argsort()]  # sort by cluster num
+
+                        if not self.minGroupSize:
+                            keep_iter = False
+
+                        else:
+                            # keep iterating?
+                            keep_iter = np.where(group_k_s[:, 1] < self.minGroupSize)[0].any()
+                            count_iter += 1
+
+                            # log kma iteration
+                            print('KMA iteration info:')
+                            for rr in group_k_s:
+                                print('  cluster: {0}, size: {1}'.format(rr[0], rr[1]))
+                            print('Try again: ', keep_iter)
+                            print('Total attemps: ', count_iter)
+                            print()
+
+
+
+                    # groupsize
+                    _, group_sizeETC = np.unique(kma.labels_, return_counts=True)
+                    # groups
+                    d_groupsETC = {}
+                    for k in range(numClusters):
+                        d_groupsETC['{0}'.format(k)] = np.where(kma.labels_ == k)
+                    self.groupSizeETC = group_sizeETC
+                    self.dGroupsETC = d_groupsETC
+                    # centroids
+                    # centroids = np.dot(kma.cluster_centers_, EOFsub)
+
+                    centroids = np.zeros((self.numClusters, EOFsub.shape[1]))  # PCsub.shape[1]))
+                    for k in range(self.numClusters):
+                        centroids[k, :] = np.dot(np.mean(PCsub[d_groupsETC['{0}'.format(k)], :], axis=1), EOFsub)
+
+
+                    # km, x and var_centers
+                    km = np.multiply(
+                        centroids,
+                        np.tile(self.SlpGrdStd, (self.numClusters, 1))
+                    ) + np.tile(self.SlpGrdMean, (self.numClusters, 1))
+                    # sort kmeans
+                    kma_order = sort_cluster_gen_corr_end(kma.cluster_centers_, self.numClusters)
+                    self.kmaOrderETC = kma_order
+                    bmus_corrected = np.zeros((len(kma.labels_),), ) * np.nan
+                    for i in range(self.numClusters):
+                        posc = np.where(kma.labels_ == kma_order[i])
+                        bmus_corrected[posc] = i
+                    self.bmus_correctedETC = bmus_corrected
+                    # reorder centroids
+                    self.sorted_cenEOFsETC = kma.cluster_centers_[kma_order, :]
+                    self.sorted_centroidsETC = centroids[kma_order, :]
+
+                    repmatStd = np.tile(self.SlpGrdStd, (numClusters, 1))
+                    repmatMean = np.tile(self.SlpGrdMean, (numClusters, 1))
+                    self.Km_ETC = np.multiply(self.sorted_centroidsETC, repmatStd) + repmatMean
+                    self.bmus = kma.labels_#self.bmus_correctedETC
+                    self.bmus_corrected = self.bmus_correctedETC
+
+
+                elif RG == 'seasonal':
+                    self.minGroupSize=minGroupSize
+                    windowHs = []
+                    windowTp = []
+                    for qq in range(len(self.DATES)-1):
+                        if np.remainder(qq,5000) == 0:
+                            print('done up to {}'.format(self.DATES[qq]))
+                        windowIndex = np.where((met.timeWave > self.DATES[qq]) & (met.timeWave < self.DATES[qq+1]))
+                        windowHs.append(np.max(met.Hs[windowIndex]))
+                        windowTp.append(np.mean(met.Tp[windowIndex]))
+
+                    self.windowHs = np.asarray(windowHs)
+                    self.windowTp = np.asarray(windowTp)
+
+                    dayOfYear = np.array([hh.timetuple().tm_yday for hh in self.DATES])  # returns 1 for January 1st
+                    dayOfYearSine = np.sin(2 * np.pi / 366 * dayOfYear)
+                    dayOfYearCosine = np.cos(2 * np.pi / 366 * dayOfYear)
+
+                    PCsub_std = np.std(PCsub, axis=0)
+                    PCsub_norm = np.divide(PCsub, PCsub_std)
+
+                    X = PCsub_norm  #  predictor
+
+                    wd = np.vstack((dayOfYearSine, dayOfYearCosine)).T
+
+                    wd_std = np.nanstd(wd, axis=0)
+                    wd_norm = np.divide(wd, wd_std)
+
+                    Y = wd_norm  # predictand
+
+                    # Adjust
+                    [n, d] = Y.shape
+                    X = np.concatenate((np.ones((n, 1)), X), axis=1)
+                    from sklearn import linear_model
+
+                    clf = linear_model.LinearRegression(fit_intercept=True)
+                    Ymod = np.zeros((n, d)) * np.nan
+                    for i in range(d):
+                        clf.fit(X, Y[:, i])
+                        beta = clf.coef_
+                        intercept = clf.intercept_
+                        Ymod[:, i] = np.ones((n,)) * intercept
+                        for j in range(len(beta)):
+                            Ymod[:, i] = Ymod[:, i] + beta[j] * X[:, j]
+
+                    # de-scale
+                    Ym = np.multiply(Ymod, wd_std)
+
+                    alpha = alphaRG
+                    # append Yregres data to PCs
+                    data = np.concatenate((PCsub, Ym), axis=1)
+                    data_std = np.std(data, axis=0)
+                    data_mean = np.mean(data, axis=0)
+
+                    #  normalize but keep PCs weigth
+                    data_norm = np.ones(data.shape) * np.nan
+                    for i in range(PCsub.shape[1]):
+                        data_norm[:, i] = np.divide(data[:, i] - data_mean[i], data_std[0])
+                    for i in range(PCsub.shape[1], data.shape[1]):
+                        data_norm[:, i] = np.divide(data[:, i] - data_mean[i], data_std[i])
+
+                    # apply alpha (PCs - Yregress weight)
+                    data_a = np.concatenate(
+                        ((1 - alpha) * data_norm[:, :self.nterm],
+                         alpha * data_norm[:, self.nterm:]),
+                        axis=1
+                    )
+
+                    #  KMeans
+                    keep_iter = True
+                    count_iter = 0
+                    while keep_iter:
+                        # n_init: number of times KMeans runs with different centroids seeds
+                        kma = KMeans(n_clusters=self.numClusters, n_init=100).fit(data_a)
+
+                        #  check minimun group_size
+                        group_keys, group_size = np.unique(kma.labels_, return_counts=True)
+
+                        # sort output
+                        group_k_s = np.column_stack([group_keys, group_size])
+                        group_k_s = group_k_s[group_k_s[:, 0].argsort()]  # sort by cluster num
+
+                        if not self.minGroupSize:
+                            keep_iter = False
+
+                        else:
+                            # keep iterating?
+                            keep_iter = np.where(group_k_s[:, 1] < self.minGroupSize)[0].any()
+                            count_iter += 1
+
+                            # log kma iteration
+                            print('KMA iteration info:')
+                            for rr in group_k_s:
+                                print('  cluster: {0}, size: {1}'.format(rr[0], rr[1]))
+                            print('Try again: ', keep_iter)
+                            print('Total attemps: ', count_iter)
+                            print()
+
+
+
+                    # groupsize
+                    _, group_sizeETC = np.unique(kma.labels_, return_counts=True)
+                    # groups
+                    d_groupsETC = {}
+                    for k in range(numClusters):
+                        d_groupsETC['{0}'.format(k)] = np.where(kma.labels_ == k)
+                    self.groupSizeETC = group_sizeETC
+                    self.dGroupsETC = d_groupsETC
+                    # centroids
+                    # centroids = np.dot(kma.cluster_centers_, EOFsub)
+
+                    centroids = np.zeros((self.numClusters, EOFsub.shape[1]))  # PCsub.shape[1]))
+                    for k in range(self.numClusters):
+                        centroids[k, :] = np.dot(np.mean(PCsub[d_groupsETC['{0}'.format(k)], :], axis=1), EOFsub)
+
+
+                    # km, x and var_centers
+                    km = np.multiply(
+                        centroids,
+                        np.tile(self.SlpGrdStd, (self.numClusters, 1))
+                    ) + np.tile(self.SlpGrdMean, (self.numClusters, 1))
+                    # sort kmeans
+                    kma_order = sort_cluster_gen_corr_end(kma.cluster_centers_, self.numClusters)
+                    self.kmaOrderETC = kma_order
+                    bmus_corrected = np.zeros((len(kma.labels_),), ) * np.nan
+                    for i in range(self.numClusters):
+                        posc = np.where(kma.labels_ == kma_order[i])
+                        bmus_corrected[posc] = i
+                    self.bmus_correctedETC = bmus_corrected
+                    # reorder centroids
+                    self.sorted_cenEOFsETC = kma.cluster_centers_[kma_order, :]
+                    self.sorted_centroidsETC = centroids[kma_order, :]
+
+                    repmatStd = np.tile(self.SlpGrdStd, (numClusters, 1))
+                    repmatMean = np.tile(self.SlpGrdMean, (numClusters, 1))
+                    self.Km_ETC = np.multiply(self.sorted_centroidsETC, repmatStd) + repmatMean
+                    self.bmus = self.bmus_correctedETC
+                    self.bmus_corrected = self.bmus_correctedETC
+
+
+                else:
+                    kma = KMeans(n_clusters=numClusters, n_init=2000).fit(PCsub)
+                    # groupsize
+                    _, group_sizeETC = np.unique(kma.labels_, return_counts=True)
+                    # groups
+                    d_groupsETC = {}
+                    for k in range(numClusters):
+                        d_groupsETC['{0}'.format(k)] = np.where(kma.labels_ == k)
+                    self.groupSizeETC = group_sizeETC
+                    self.dGroupsETC = d_groupsETC
+                    # centroids
+                    centroids = np.dot(kma.cluster_centers_, EOFsub)
+                    # km, x and var_centers
+                    km = np.multiply(
+                        centroids,
+                        np.tile(self.SlpGrdStd, (numClusters, 1))
+                    ) + np.tile(self.SlpGrdMean, (numClusters, 1))
+                    # sort kmeans
+                    kma_order = sort_cluster_gen_corr_end(kma.cluster_centers_, numClusters)
+                    self.kmaOrderETC = kma_order
+                    bmus_corrected = np.zeros((len(kma.labels_),), ) * np.nan
+                    for i in range(numClusters):
+                        posc = np.where(kma.labels_ == kma_order[i])
+                        bmus_corrected[posc] = i
+                    self.bmus_correctedETC = bmus_corrected
+                    # reorder centroids
+                    self.sorted_cenEOFsETC = kma.cluster_centers_[kma_order, :]
+                    self.sorted_centroidsETC = centroids[kma_order, :]
+
+                    repmatStd = np.tile(self.SlpGrdStd, (numClusters, 1))
+                    repmatMean = np.tile(self.SlpGrdMean, (numClusters, 1))
+                    self.Km_ETC = np.multiply(self.sorted_centroidsETC, repmatStd) + repmatMean
+                    self.bmus = self.bmus_correctedETC
+
+
+                import pickle
+                samplesPickle = 'dwts.pickle'
+                outputSamples = {}
+                outputSamples['Km_ETC'] = self.Km_ETC
+                outputSamples['bmus'] = self.bmus
+                outputSamples['sorted_centroidsETC'] = self.sorted_centroidsETC
+                outputSamples['sorted_cenEOFsETC'] = self.sorted_cenEOFsETC
+                outputSamples['bmus_correctedETC'] = self.bmus_correctedETC
+                outputSamples['kmaOrderETC'] = self.kmaOrderETC
+                outputSamples['dGroupsETC'] = self.dGroupsETC
+                outputSamples['groupSizeETC'] = self.groupSizeETC
+                outputSamples['numClustersETC'] = self.numClusters
+                outputSamples['numClusters'] = self.numClusters
+                outputSamples['bmus_corrected'] = self.bmus_correctedETC
+                outputSamples['windowHs'] = self.windowHs
+                outputSamples['windowTp'] = self.windowTp
+
+                with open(os.path.join(self.savePath,samplesPickle), 'wb') as f:
+                    pickle.dump(outputSamples, f)
 
 
 
@@ -1519,7 +1807,7 @@ class weatherTypes():
 
         dt = time[0]
         end = time[-1]
-        step = timedelta(days=1)
+        step = timedelta(hours=self.avgTime)
         midnightTime = []
         while dt <= end:
             midnightTime.append(dt)  # .strftime('%Y-%m-%d'))
@@ -1537,7 +1825,8 @@ class weatherTypes():
         groupedList.append(tempBmusGroup)
         groupLengthList.append(np.asarray([len(i) for i in tempBmusGroup]))
         bmuGroupList.append(np.asarray([bmus[i[0]] for i in tempBmusGroup]))
-        timeGroupList.append([np.asarray(midnightTime)[i] for i in tempBmusGroup]) # THIS SLOWS EVERYTHING DOWN 100 FOLD
+        midnightTimeArray = np.asarray(midnightTime)
+        timeGroupList.append([midnightTimeArray[i] for i in tempBmusGroup]) # THIS SLOWS EVERYTHING DOWN 100 FOLD
 
         simBmuChopped = []
         simBmuLengthChopped = []
@@ -1556,17 +1845,17 @@ class weatherTypes():
                 #     print('done with {} hydrographs'.format(i))
                 tempGrouped = grouped[i]
                 tempBmu = int(bmuGroup[i])
-                remainingDays = groupLength[i] - 5
-                if groupLength[i] < 5:
+                remainingDays = groupLength[i] - (5*24/self.avgTime)
+                if groupLength[i] < (5*24/self.avgTime):
                     simGroupLength.append(int(groupLength[i]))
                     simGrouped.append(grouped[i])
                     simBmu.append(tempBmu)
                 else:
                     counter = 0
-                    while (len(grouped[i]) - counter) > 5:
+                    while (len(grouped[i]) - counter) > (5*24/self.avgTime):
                         # print('we are in the loop with remainingDays = {}'.format(remainingDays))
                         # random days between 3 and 5
-                        randLength = random.randint(1, 3) + 2
+                        randLength = random.randint(1, (3*24/self.avgTime)) + int((2*24/self.avgTime))
                         # add this to the record
                         simGroupLength.append(int(randLength))
                         # simGrouped.append(tempGrouped[0:randLength])
@@ -1642,7 +1931,7 @@ class weatherTypes():
             counter = 0
             for i in range(len(index)):
                 st = startTimes[index[i]]
-                et = endTimes[index[i]] + timedelta(days=1)
+                et = endTimes[index[i]] + timedelta(hours=self.avgTime)
 
                 waveInd = np.where((time_all < et) & (time_all >= st))
                 ntrInd = np.where((tNTR < et) & (tNTR >= st))

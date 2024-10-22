@@ -336,9 +336,46 @@ class getMetOcean():
         self.Dm = waveNorm
 
 
+
+    def downloadWIS(self,nodeID='ST84065',localDir='/volumes/anderson/WIS84065/'):
+        from functions import get_elements
+        from urllib.request import urlretrieve
+
+        server_url = 'https://chldata.erdc.dren.mil/thredds/'
+        request_url = os.path.join('catalog/wis/Pacific/',nodeID)
+
+        years = np.arange(1980, 2024)
+        for year in years:
+            url = server_url + request_url + str(year) + '/catalog.xml'
+            print(url)
+            catalog = get_elements(url, 'dataset', 'urlPath')
+            files = []
+            for citem in catalog:
+                if (citem[-3:] == '.nc'):
+                    files.append(citem)
+            count = 0
+
+            file_subset = files  # [0:12]
+
+            for f in file_subset:
+                count += 1
+                file_url = server_url + 'fileServer/' + f
+                file_prefix = file_url.split('/')[-1][:-3]
+                file_name = file_prefix + '.nc'
+                # file_name = file_prefix + '_' + str(count) + '.nc'
+
+                print('Downloaing file %d of %d' % (count, len(file_subset)))
+                print(file_url)
+                print(file_name)
+                a = urlretrieve(file_url, localDir + file_name)
+                print(a)
+
+        return catalog, files, file_subset
+
     def getERA5WavesAndWinds(self,printToScreen=False):
         from datetime import datetime, date
         from dateutil.relativedelta import relativedelta
+
 
         year = self.startTime[0]
         month = self.startTime[1]
@@ -367,14 +404,13 @@ class getMetOcean():
             # dataset you want to read
             dataset = 'reanalysis-era5-single-levels'
             # flag to download data
-            download_flag = False
+            download_flag = True
             # api parameters
             params = {
-                "format": "netcdf",
-                "product_type": "reanalysis",
+                "product_type": ["reanalysis"],
                 "variable": ['significant_height_of_combined_wind_waves_and_swell','mean_wave_period','mean_wave_direction','10m_u_component_of_wind','10m_v_component_of_wind'],
                 'year': [str(extractTime[hh].year)],
-                'month': [str(extractTime[hh].month), ],
+                'month': [str(extractTime[hh].month).zfill(2), ],
                 'day': ['01', '02', '03',
                         '04', '05', '06',
                         '07', '08', '09',
@@ -396,17 +432,20 @@ class getMetOcean():
                     '18:00', '19:00', '20:00',
                     '21:00', '22:00', '23:00',
                 ],
+                "data_format": "grib",
+                "download_format": "unarchived",
                 "area": [self.latTop, self.lonLeft, self.latBot, self.lonRight],
             }
             # retrieves the path to the file
-            fl = cds.retrieve(dataset, params)
-            # download the file
-            if download_flag:
-                fl.download("./output.nc")
+            fl = cds.retrieve(dataset, params,'./output.grib')
+            # # download the file
+            # if download_flag:
+            #     fl.download("./output.nc")
             # load into memory
-            with urlopen(fl.location) as f:
-                ds = xr.open_dataset(f.read())
-
+            # with urlopen(fl.location) as f:
+            #     ds = xr.open_dataset(f.read())
+            f = "./output.grib"
+            ds = xr.open_dataset(f, engine='cfgrib')
             m, n, p = np.shape(ds.swh)
             SWH = np.zeros((n * p, m))
             MWP = np.zeros((n * p, m))
@@ -581,6 +620,8 @@ class getMetOcean():
             extractTime.append(dt)  # .strftime('%Y-%m-%d'))
             dt += step
 
+        self.extractTime = extractTime
+
         import cdsapi
         import xarray as xr
         from urllib.request import urlopen
@@ -593,12 +634,11 @@ class getMetOcean():
             cds = cdsapi.Client()
             # dataset you want to read
             dataset = 'reanalysis-era5-single-levels'
-            # flag to download data
-            download_flag = False
+            # # flag to download data
+            # download_flag = False
             # api parameters
             params = {
-                "format": "netcdf",
-                "product_type": "reanalysis",
+                "product_type": ["reanalysis"],
                 "variable": ['significant_height_of_combined_wind_waves_and_swell','mean_wave_period','mean_wave_direction'],
                 'year': [str(extractTime[hh].year)],
                 'month': [str(extractTime[hh].month), ],
@@ -624,15 +664,23 @@ class getMetOcean():
                     '21:00', '22:00', '23:00',
                 ],
                 "area": [self.latTop, self.lonLeft, self.latBot, self.lonRight],
+                "download_format": "unarchived",
+                "data_format": "netcdf",
+
             }
             # retrieves the path to the file
-            fl = cds.retrieve(dataset, params)
-            # download the file
-            if download_flag:
-                fl.download("./output.nc")
+            # fl = cds.retrieve(dataset, params)
+            cds.retrieve(dataset, params,os.path.join(self.savePath,"waves{}_{}".format(extractTime[hh].year,extractTime[hh].month)))
+
+            # # download the file
+            # if download_flag:
+            #     fl.download("./output.nc")
             # load into memory
-            with urlopen(fl.location) as f:
-                ds = xr.open_dataset(f.read())
+            # with urlopen(fl.location) as f:
+            #     ds = xr.open_dataset(f.read())
+            # with open("./output.nc", "rb") as f:
+            #     ds = xr.open_dataset(f)
+            ds = xr.open_dataset(os.path.join(self.savePath,"waves{}_{}".format(extractTime[hh].year,extractTime[hh].month)))#,engine='netcdf4')
 
             m, n, p = np.shape(ds.swh)
             SWH = np.zeros((n * p, m))
@@ -645,19 +693,27 @@ class getMetOcean():
                 MWD[:,mmm] = ds.mwd[mmm, :, :].values.flatten()
 
             if counter == 0:
-                tC = ds.time.values
+                tC = ds.valid_time.values
                 Dm = MWD
                 Tp = MWP
                 Hs = SWH
             else:
-                tC = np.hstack((tC,ds.time.values))
+                tC = np.hstack((tC,ds.valid_time.values))
                 Dm = np.hstack((Dm,MWD))
                 Tp = np.hstack((Tp,MWP))
                 Hs = np.hstack((Hs,SWH))
             counter = counter + 1
 
         print('Extracted until {}-{}'.format(year2, month2))
+        print('Final time in file: {}'.format(ds.valid_time.values[-1]))
 
+        # import os
+        # if os.path.exists("./output.nc"):
+        #     os.remove("./output.nc")
+        # else:
+        #     print("The file does not exist")
+        del cds
+        del ds
         # waveNorm = np.asarray(Dm.flatten()) - int(self.shoreNormal)
         # neg = np.where((waveNorm > 180))
         # waveNorm[neg[0]] = waveNorm[neg[0]] - 360

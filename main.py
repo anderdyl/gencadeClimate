@@ -6,8 +6,8 @@ from climateIndices import climateIndices
 
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
-warnings.filterwarnings("ignore", category=FutureWarning)
-
+import os
+import pickle
 import sys
 import subprocess
 
@@ -22,55 +22,72 @@ savePath = '/volumes/macDrive/va/'
 slpPath = '/volumes/macDrive/prmsl/'
 wisPath = '/volumes/macDrive/WIS63142/'
 wlPath = '/users/dylananderson/documents/data/frfWaterLevel/'
-startTime = [1979, 1, 1]
-endTime = [2024, 8, 31]
-
+startTime = [1979, 2, 1]
+endTime = [2024, 9, 30]
+slpMemory = True
 #
 # climate = climateIndices(awtStart=1880,awtEnd=2024,savePath=savePath)
 # climate.atlanticAWT(plotOutput=True)
 # climate.mjo(historicalSimNum=100,futureSimNum=100,loadPrevious=False,plotOutput=True)
 #
 #
-# wts = weatherTypes(slpPath=slpPath,startTime=startTime,endTime=endTime,savePath=savePath)
-# wts.extractCFSR(printToScreen=True)
+wts = weatherTypes(slpPath=slpPath,startTime=startTime,endTime=endTime,savePath=savePath, slpMemory=slpMemory,avgTime=12,resolution=1,
+                   latBot=-5,latTop=65,lonRight=0,basin='atlantic')
+# wts.extractCFSR(printToScreen=True,estelaMat='/volumes/anderson/ESTELA/out/NagsHead2/NagsHead2_obj.mat')
 # #
-# # plotting.plotSlpExample(struct=duckSLP)
+wts.extractCFSR(loadPrior=True,loadPickle='/volumes/macDrive/va/slps12hr1degRes.pickle')
+
+
+
+plotting.plotSlpExample(struct=wts)
 # wts.pcaOfSlps()
-# # plotting.plotEOFs(struct=duckSLP)
-# wts.wtClusters(numClusters=64,minGroupSize=50,TCs=False,RG='seasonal',Basin=b'NA',alphaRG=0.2)
-# # plotting.plotWTs(struct=wts,withTCs=False)
-# # plotting.plotSeasonal(struct=wts)
+wts.pcaOfSlps(loadPrior=True,loadPickle='/volumes/macDrive/va/pcas12hr1degRes.pickle')
+
+plotting.plotEOFs(struct=wts)
 
 
-import os
-import pickle
-with open(os.path.join(savePath,'latestData.pickle'), "rb") as input_file:
-   priorComputations = pickle.load(input_file)
-wts = priorComputations['wts']
-# duckMET = priorComputations['duckMet']
-climate = priorComputations['climate']
+metOcean = getMetOcean(wlPath=wlPath,wisPath=wisPath,startTime=startTime,endTime=endTime,shoreNormal=155)
 
-#
-# #
-# #
-# #
-# #
-# metOcean = getMetOcean(wlPath=wlPath,wisPath=wisPath,startTime=startTime,endTime=endTime,shoreNormal=155)
+
+stormPickle = '/users/dylananderson/Documents/projects/frf_python_share/stormHs95Over12Hours.pickle'
+with open(stormPickle, "rb") as input_file:
+    inputStorms = pickle.load(input_file)
+
+metOcean.timeWave = inputStorms['combinedTimeWIS']
+metOcean.Hs = inputStorms['combinedHsWIS']
+metOcean.Tp = inputStorms['combinedTpWIS']
+metOcean.Dm = inputStorms['combinedDmWIS']
+
+
 # metOcean.getWISLocal()
 # # metOcean.getWIS()
 # # #def getWISThredds(self,basin,buoy,**kwargs):
 # # metOcean.getWISThredds(basin = 'Atlantic',buoy = 'ST63218',variables = ['waveHs','waveTpPeak','waveMeanDirection'])
-# metOcean.getWaterLevels()
 # # plotting.plotOceanConditions(struct=metOcean)
-# #
-# wts.separateHistoricalHydrographs(metOcean=metOcean)
-wts.metOceanCopulas()
-# #
-wts.futureSimStart = 2024
-wts.futureSimEnd = 2124
-# wts.alrSimulations(climate=climate,historicalSimNum=10,futureSimNum=10)
-wts.simsFutureInterpolated(simNum=10)
 
+
+# wts.wtClusters(numClusters=64,minGroupSize=50,TCs=False,RG='seasonal',Basin=b'NA',alphaRG=0.2)
+wts.wtClusters(numClusters=64,minGroupSize=30,TCs=False,RG='waves',Basin=b'NA',alphaRG=0.2,met=metOcean,loadPrior=True,
+               loadPickle=os.path.join(savePath,'dwts12hr1degRes64withRG02.pickle'))
+plotting.plotWTs(struct=wts,withTCs=False)
+# plotting.plotSeasonal(struct=wts)
+
+metOcean.getWaterLevels()
+
+
+with open(os.path.join(savePath,'latestData.pickle'), "rb") as input_file:
+   priorComputations = pickle.load(input_file)
+# wts = priorComputations['wts']
+# duckMET = priorComputations['duckMet']
+climate = priorComputations['climate']
+
+# #
+wts.separateHistoricalHydrographs(metOcean=metOcean)
+wts.metOceanCopulas()
+# # #
+wts.alrSimulations(climate=climate,historicalSimNum=10,futureSimNum=10,futureSimStart=2024,futureSimEnd=2124)
+wts.simsFutureInterpolated(simNum=10)
+#
 wts.simsFutureValidated(met=metOcean)
 
 # import os

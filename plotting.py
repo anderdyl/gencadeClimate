@@ -57,7 +57,15 @@ def plotWTs(struct,withTCs=True):
             spatialField = struct.Km_ETC[(hh), 0:len(struct.xFlat[~struct.isOnLandFlat])] / 100 - struct.SlpGrdMean[0:len(
                 struct.xFlat[~struct.isOnLandFlat])] / 100
             # spatialField = np.multiply(EOFs[hh, len(self.xFlat[~self.isOnLandFlat]):], np.sqrt(variance[hh]))
-            X_in = struct.xFlat[~struct.isOnLandFlat]
+
+            if struct.basin == 'atlantic':
+                X_in = struct.xFlat[~struct.isOnLandFlat]
+                X_in_Checker = np.where(X_in < 180)
+                X_in[X_in_Checker] = X_in[X_in_Checker] + 360
+
+            else:
+                X_in = struct.xFlat[~struct.isOnLandFlat]
+
             Y_in = struct.yFlat[~struct.isOnLandFlat]
             sea_nodes = []
             for qq in range(len(X_in)):
@@ -70,10 +78,25 @@ def plotWTs(struct,withTCs=True):
             clevels = np.arange(-32, 32, 1)
             # m = Basemap(projection='merc', llcrnrlat=2, urcrnrlat=52, llcrnrlon=270, urcrnrlon=360, lat_ts=25,
             #             resolution='c')
-            m = Basemap(projection='merc', llcrnrlat=10, urcrnrlat=45, llcrnrlon=255, urcrnrlon=345, lat_ts=20,
-                        resolution='c')
+            if struct.basin == 'atlantic':
+                m = Basemap(projection='merc', llcrnrlat=struct.latBot, urcrnrlat=struct.latTop,
+                            llcrnrlon=struct.lonLeft,
+                            urcrnrlon=struct.lonRight + 360, lat_ts=10,
+                            resolution='c')
+            else:
+                m = Basemap(projection='merc', llcrnrlat=struct.latBot, urcrnrlat=struct.latTop,
+                            llcrnrlon=struct.lonLeft,
+                            urcrnrlon=struct.lonRight, lat_ts=10,
+                            resolution='c')
             m.fillcontinents(color=dwtcolors[hh])
-            cx, cy = m(struct.xGrid, struct.yGrid)
+            if struct.basin == 'atlantic':
+                xGridCheck = struct.xGrid
+                indexChecker = np.where(xGridCheck < 180)
+                xGridCheck[indexChecker] = xGridCheck[indexChecker] + 360
+                cx, cy = m(xGridCheck, struct.yGrid)
+            else:
+                cx, cy = m(struct.xGrid, struct.yGrid)
+
             m.drawcoastlines()
             CS = m.contourf(cx, cy, rectField, clevels, vmin=-20, vmax=20, cmap=cm.RdBu_r)  # , shading='gouraud')
             # p1.set_title('EOF {} = {}%'.format(hh+1,np.round(nPercent[hh]*10000)/100))
@@ -106,7 +129,15 @@ def plotWTs(struct,withTCs=True):
             spatialField = struct.Km_TC[(hh), 0:len(struct.xFlat[~struct.isOnLandFlat])] / 100 - struct.SlpGrdMean[0:len(
                 struct.xFlat[~struct.isOnLandFlat])] / 100
             # spatialField = np.multiply(EOFs[hh, len(self.xFlat[~self.isOnLandFlat]):], np.sqrt(variance[hh]))
-            X_in = struct.xFlat[~struct.isOnLandFlat]
+
+            if struct.basin == 'atlantic':
+                X_in = struct.xFlat[~struct.isOnLandFlat]
+                X_in_Checker = np.where(X_in < 180)
+                X_in[X_in_Checker] = X_in[X_in_Checker] + 360
+
+            else:
+                X_in = struct.xFlat[~struct.isOnLandFlat]
+
             Y_in = struct.yFlat[~struct.isOnLandFlat]
             sea_nodes = []
             for qq in range(len(X_in)):
@@ -119,10 +150,26 @@ def plotWTs(struct,withTCs=True):
             clevels = np.arange(-32, 32, 1)
             # m = Basemap(projection='merc', llcrnrlat=2, urcrnrlat=52, llcrnrlon=270, urcrnrlon=360, lat_ts=25,
             #             resolution='c')
-            m = Basemap(projection='merc', llcrnrlat=10, urcrnrlat=45, llcrnrlon=255, urcrnrlon=345, lat_ts=20,
-                        resolution='c')
+            if struct.basin == 'atlantic':
+                m = Basemap(projection='merc', llcrnrlat=struct.latBot, urcrnrlat=struct.latTop,
+                            llcrnrlon=struct.lonLeft,
+                            urcrnrlon=struct.lonRight + 360, lat_ts=10,
+                            resolution='c')
+            else:
+                m = Basemap(projection='merc', llcrnrlat=struct.latBot, urcrnrlat=struct.latTop,
+                            llcrnrlon=struct.lonLeft,
+                            urcrnrlon=struct.lonRight, lat_ts=10,
+                            resolution='c')
             m.fillcontinents(color=dwtcolors[hh+49])
-            cx, cy = m(struct.xGrid, struct.yGrid)
+
+            if struct.basin == 'atlantic':
+                xGridCheck = struct.xGrid
+                indexChecker = np.where(xGridCheck < 180)
+                xGridCheck[indexChecker] = xGridCheck[indexChecker] + 360
+                cx, cy = m(xGridCheck, struct.yGrid)
+            else:
+                cx, cy = m(struct.xGrid, struct.yGrid)
+
             m.drawcoastlines()
             CS = m.contourf(cx, cy, rectField, clevels, vmin=-20, vmax=20, cmap=cm.RdBu_r)  # , shading='gouraud')
             # p1.set_title('EOF {} = {}%'.format(hh+1,np.round(nPercent[hh]*10000)/100))
@@ -168,7 +215,15 @@ def plotWTs(struct,withTCs=True):
             spatialField = struct.Km_ETC[(hh), 0:len(struct.xFlat[~struct.isOnLandFlat])] / 100 - struct.SlpGrdMean[0:len(
                 struct.xFlat[~struct.isOnLandFlat])] / 100
             # spatialField = np.multiply(EOFs[hh, len(self.xFlat[~self.isOnLandFlat]):], np.sqrt(variance[hh]))
-            X_in = struct.xFlat[~struct.isOnLandFlat]
+
+            if struct.basin == 'atlantic':
+                X_in = struct.xFlat[~struct.isOnLandFlat]
+                X_in_Checker = np.where(X_in < 180)
+                X_in[X_in_Checker] = X_in[X_in_Checker] + 360
+
+            else:
+                X_in = struct.xFlat[~struct.isOnLandFlat]
+
             Y_in = struct.yFlat[~struct.isOnLandFlat]
             sea_nodes = []
             for qq in range(len(X_in)):
@@ -181,8 +236,18 @@ def plotWTs(struct,withTCs=True):
             clevels = np.arange(-32, 32, 1)
             # m = Basemap(projection='merc', llcrnrlat=2, urcrnrlat=52, llcrnrlon=270, urcrnrlon=360, lat_ts=25,
             #             resolution='c')
-            m = Basemap(projection='merc', llcrnrlat=10, urcrnrlat=45, llcrnrlon=255, urcrnrlon=345, lat_ts=20,
-                        resolution='c')
+
+            if struct.basin == 'atlantic':
+                m = Basemap(projection='merc', llcrnrlat=struct.latBot, urcrnrlat=struct.latTop,
+                            llcrnrlon=struct.lonLeft,
+                            urcrnrlon=struct.lonRight + 360, lat_ts=10,
+                            resolution='c')
+            else:
+                m = Basemap(projection='merc', llcrnrlat=struct.latBot, urcrnrlat=struct.latTop,
+                            llcrnrlon=struct.lonLeft,
+                            urcrnrlon=struct.lonRight, lat_ts=10,
+                            resolution='c')
+
             m.fillcontinents(color=dwtcolors[hh])
             cx, cy = m(struct.xGrid, struct.yGrid)
             m.drawcoastlines()
@@ -223,18 +288,43 @@ def plotSlpExample(struct, plotTime=0):
 
     spatialField = struct.SLPS[:, plotTime] / 100  # SLPS[:, i] / 100  # - np.nanmean(SLP, axis=1) / 100
 
-    rectField = spatialField.reshape(struct.My, struct.Mx)
-    # rectField[~is_on_land] = rectField[~is_on_land]*np.nan
-    rectFieldMasked = np.where(~struct.isOnLandGrid, rectField, 0)
-    m = Basemap(projection='merc', llcrnrlat=-5, urcrnrlat=55, llcrnrlon=255, urcrnrlon=360, lat_ts=10,
-                resolution='c')
+    if struct.basin == 'atlantic':
+        X_in = struct.xFlat[~struct.isOnLandFlat]
+        X_in_Checker = np.where(X_in < 180)
+        X_in[X_in_Checker] = X_in[X_in_Checker] + 360
+
+    else:
+        X_in = struct.xFlat[~struct.isOnLandFlat]
+    Y_in = struct.yFlat[~struct.isOnLandFlat]
+    sea_nodes = []
+    for qq in range(len(X_in)):
+        sea_nodes.append(np.where((struct.xGrid == X_in[qq]) & (struct.yGrid == Y_in[qq])))
+
+    rectField = np.ones((np.shape(struct.xGrid))) * np.nan
+    for tt in range(len(sea_nodes)):
+        rectField[sea_nodes[tt]] = spatialField[tt]
+
+    if struct.basin == 'atlantic':
+        m = Basemap(projection='merc', llcrnrlat=struct.latBot, urcrnrlat=struct.latTop, llcrnrlon=struct.lonLeft,
+                    urcrnrlon=struct.lonRight+360, lat_ts=10,
+                    resolution='c')
+    else:
+        m = Basemap(projection='merc', llcrnrlat=struct.latBot, urcrnrlat=struct.latTop, llcrnrlon=struct.lonLeft,
+                    urcrnrlon=struct.lonRight, lat_ts=10,
+                    resolution='c')
+    if struct.basin == 'atlantic':
+        xGridCheck = struct.xGrid
+        indexChecker = np.where(xGridCheck < 180)
+        xGridCheck[indexChecker] = xGridCheck[indexChecker] + 360
+        cx, cy = m(xGridCheck, struct.yGrid)
+    else:
+        cx, cy = m(struct.xGrid, struct.yGrid)
     m.fillcontinents(color=[0.5, 0.5, 0.5])
-    cx, cy = m(struct.xGrid, struct.yGrid)
 
     m.drawcoastlines()
     # m.bluemarble()
     # CS = m.contourf(cx, cy, rectField.T, clevels, vmin=-20, vmax=20, cmap=cm.RdBu_r, shading='gouraud')
-    CS = m.contourf(cx.T, cy.T, rectFieldMasked.T, clevels, vmin=975, vmax=1045, cmap=cm.RdBu_r)  # , shading='gouraud')
+    CS = m.contourf(cx.T, cy.T, rectField.T, clevels, vmin=975, vmax=1045, cmap=cm.RdBu_r)  # , shading='gouraud')
 
     tx, ty = m(320, -0)
     parallels = np.arange(0, 360, 10)
@@ -262,7 +352,15 @@ def plotEOFs(struct):
     for hh in range(9):
         p1 = plt.subplot2grid((3, 3), (c1, c2))
         spatialField = np.multiply(struct.EOFs[hh, 0:len(struct.xFlat[~struct.isOnLandFlat])], np.sqrt(struct.variance[hh]))
-        X_in = struct.xFlat[~struct.isOnLandFlat]
+
+        if struct.basin == 'atlantic':
+            X_in = struct.xFlat[~struct.isOnLandFlat]
+            X_in_Checker = np.where(X_in < 180)
+            X_in[X_in_Checker] = X_in[X_in_Checker] + 360
+
+        else:
+            X_in = struct.xFlat[~struct.isOnLandFlat]
+
         Y_in = struct.yFlat[~struct.isOnLandFlat]
         sea_nodes = []
         for qq in range(len(X_in)):
@@ -273,12 +371,23 @@ def plotEOFs(struct):
             rectField[sea_nodes[tt]] = spatialField[tt]
 
         clevels = np.arange(-2, 2, .05)
-        m = Basemap(projection='merc', llcrnrlat=0, urcrnrlat=55, llcrnrlon=255, urcrnrlon=375, lat_ts=10,
-                    resolution='c')
-        cx, cy = m(struct.xGrid, struct.yGrid)
+        if struct.basin == 'atlantic':
+            m = Basemap(projection='merc', llcrnrlat=struct.latBot, urcrnrlat=struct.latTop, llcrnrlon=struct.lonLeft, urcrnrlon=struct.lonRight+360, lat_ts=10,
+                        resolution='c')
+        else:
+            m = Basemap(projection='merc', llcrnrlat=struct.latBot, urcrnrlat=struct.latTop, llcrnrlon=struct.lonLeft, urcrnrlon=struct.lonRight, lat_ts=10,
+                        resolution='c')
+        if struct.basin == 'atlantic':
+            xGridCheck = struct.xGrid
+            indexChecker = np.where(xGridCheck<180)
+            xGridCheck[indexChecker] = xGridCheck[indexChecker]+360
+            cx, cy = m(xGridCheck, struct.yGrid)
+        else:
+            cx, cy = m(struct.xGrid, struct.yGrid)
+
         m.drawcoastlines()
         CS = m.contourf(cx, cy, rectField, clevels, vmin=-1.2, vmax=1.2, cmap=cm.RdBu_r)  # , shading='gouraud')
-        p1.set_title('EOF {} = {}%'.format(hh + 1, np.round(struct.nPercent[hh] * 10000) / 100))
+        p1.set_title('SLP EOF {} = {}%'.format(hh + 1, np.round(struct.nPercent[hh] * 10000) / 100))
         c2 += 1
         if c2 == 3:
             c1 += 1
@@ -291,7 +400,14 @@ def plotEOFs(struct):
     for hh in range(9):
         p1 = plt.subplot2grid((3, 3), (c1, c2))
         spatialField = np.multiply(struct.EOFs[hh, len(struct.xFlat[~struct.isOnLandFlat]):], np.sqrt(struct.variance[hh]))
-        X_in = struct.xFlat[~struct.isOnLandFlat]
+
+        if struct.basin == 'atlantic':
+            X_in = struct.xFlat[~struct.isOnLandFlat]
+            X_in_Checker = np.where(X_in < 180)
+            X_in[X_in_Checker] = X_in[X_in_Checker] + 360
+
+        else:
+            X_in = struct.xFlat[~struct.isOnLandFlat]
         Y_in = struct.yFlat[~struct.isOnLandFlat]
         sea_nodes = []
         for qq in range(len(X_in)):
@@ -301,13 +417,24 @@ def plotEOFs(struct):
         for tt in range(len(sea_nodes)):
             rectField[sea_nodes[tt]] = spatialField[tt]
 
+
         clevels = np.arange(-2, 2, .05)
-        m = Basemap(projection='merc', llcrnrlat=0, urcrnrlat=55, llcrnrlon=255, urcrnrlon=375, lat_ts=10,
+        if struct.basin == 'atlantic':
+            m = Basemap(projection='merc', llcrnrlat=struct.latBot, urcrnrlat=struct.latTop, llcrnrlon=struct.lonLeft, urcrnrlon=struct.lonRight+360, lat_ts=10,
                         resolution='c')
-        cx, cy = m(struct.xGrid, struct.yGrid)
+        else:
+            m = Basemap(projection='merc', llcrnrlat=struct.latBot, urcrnrlat=struct.latTop, llcrnrlon=struct.lonLeft, urcrnrlon=struct.lonRight, lat_ts=10,
+                        resolution='c')
+        if struct.basin == 'atlantic':
+            xGridCheck = struct.xGrid
+            indexChecker = np.where(xGridCheck < 180)
+            xGridCheck[indexChecker] = xGridCheck[indexChecker] + 360
+            cx, cy = m(xGridCheck, struct.yGrid)
+        else:
+            cx, cy = m(struct.xGrid, struct.yGrid)
         m.drawcoastlines()
         CS = m.contourf(cx, cy, rectField, clevels, vmin=-1.2, vmax=1.2, cmap=cm.RdBu_r)  # , shading='gouraud')
-        p1.set_title('EOF {} = {}%'.format(hh + 1, np.round(struct.nPercent[hh] * 10000) / 100))
+        p1.set_title('GRD EOF {} = {}%'.format(hh + 1, np.round(struct.nPercent[hh] * 10000) / 100))
         c2 += 1
         if c2 == 3:
             c1 += 1
@@ -327,7 +454,15 @@ def plotEOFsAndPCs(struct):
     for hh in range(9):
         p1 = plt.subplot2grid((9, 3), (c1, c2),rowspan=2,colspan=1)
         spatialField = np.multiply(struct.EOFs[hh, 0:len(struct.xFlat[~struct.isOnLandFlat])], np.sqrt(struct.variance[hh]))
-        X_in = struct.xFlat[~struct.isOnLandFlat]
+
+        if struct.basin == 'atlantic':
+            X_in = struct.xFlat[~struct.isOnLandFlat]
+            X_in_Checker = np.where(X_in < 180)
+            X_in[X_in_Checker] = X_in[X_in_Checker] + 360
+
+        else:
+            X_in = struct.xFlat[~struct.isOnLandFlat]
+
         Y_in = struct.yFlat[~struct.isOnLandFlat]
         sea_nodes = []
         for qq in range(len(X_in)):
@@ -456,3 +591,174 @@ def plotSeasonal(struct):
     ax.xaxis.set_major_formatter(monthsFmt)
     ax.set_ylim(0, 1)#struct.endTime[0]-struct.startTime[0])
     ax.set_ylabel('')
+
+
+#
+#
+# def axplot_AWT_2D(ax, var_2D, num_wts, id_wt, color_wt):
+#     'axes plot AWT variable (2D)'
+#
+#     # plot 2D AWT
+#     ax.pcolormesh(
+#         var_2D,
+#         cmap='RdBu_r', shading='gouraud',
+#         vmin=-1.5, vmax=+1.5,
+#     )
+#
+#     # title and axis labels/ticks
+#     ax.set_title(
+#         'WT #{0} --- {1} years'.format(id_wt, num_wts),
+#         {'fontsize': 14, 'fontweight':'bold'}
+#     )
+#     ax.set_xticks([])
+#     ax.set_yticks([])
+#     ax.set_ylabel('month', {'fontsize':8})
+#     ax.set_xlabel('lon', {'fontsize':8})
+#
+#     # set WT color on axis frame
+#     plt.setp(ax.spines.values(), color=color_wt, linewidth=4)
+#     plt.setp([ax.get_xticklines(), ax.get_yticklines()], color=color_wt)
+#
+# def colors_awt():
+#     import numpy as np
+#     # 6 AWT colors
+#     l_colors_dwt = [
+#         (155/255.0, 0, 0),
+#         (1, 0, 0),
+#         (255/255.0, 216/255.0, 181/255.0),
+#         (164/255.0, 226/255.0, 231/255.0),
+#         (0/255.0, 190/255.0, 255/255.0),
+#         (51/255.0, 0/255.0, 207/255.0),
+#     ]
+#
+#     return np.array(l_colors_dwt)
+# def Plot_AWTs(bmus, Km, n_clusters, lon, show=True):
+#     '''
+#     Plot Annual Weather Types
+#
+#     bmus, Km, n_clusters, lon - from KMA_simple()
+#     '''
+#
+#     # get number of rows and cols for gridplot
+#     #n_cols, n_rows = GetBestRowsCols(n_clusters)
+#     n_rows = 2
+#     n_cols = 3
+#     # get cluster colors
+#     cs_awt = colors_awt()
+#
+#     # plot figure
+#     fig = plt.figure()#figsize=(_faspect*_fsize, _fsize))
+#
+#     gs = gridspec.GridSpec(n_rows, n_cols, wspace=0.10, hspace=0.15)
+#     gr, gc = 0, 0
+#
+#     for ic in range(n_clusters):
+#
+#         id_AWT = ic + 1           # cluster ID
+#         index = np.where(bmus==ic)[0][:]
+#         var_AWT = Km[ic,:]
+#         var_AWT_2D = var_AWT.reshape(-1, len(lon))
+#         num_WTs = len(index)
+#         clr = cs_awt[ic]          # cluster color
+#
+#         # AWT var 2D
+#         ax = plt.subplot(gs[gr, gc])
+#         axplot_AWT_2D(ax, var_AWT_2D, num_WTs, id_AWT, clr)
+#
+#         gc += 1
+#         if gc >= n_cols:
+#             gc = 0
+#             gr += 1
+#
+#     # show and return figure
+#     if show: plt.show()
+#     return fig
+# def axplot_AWT_years(ax, dates_wt, bmus_wt, color_wt, xticks_clean=False,
+#                      ylab=None, xlims=None):
+#     'axes plot AWT dates'
+#
+#     # date axis locator
+#     yloc5 = mdates.YearLocator(5)
+#     yloc1 = mdates.YearLocator(1)
+#     yfmt = mdates.DateFormatter('%Y')
+#
+#     # get years string
+#     ys_str = np.array([str(d).split('-')[0] for d in dates_wt])
+#
+#     # use a text bottom - top cycler
+#     text_cycler_va = itertools.cycle(['bottom', 'top'])
+#     text_cycler_ha = itertools.cycle(['left', 'right'])
+#
+#     # plot AWT dates and bmus
+#     ax.plot(
+#         dates_wt, bmus_wt,
+#         marker='+',markersize=9, linestyle='', color=color_wt,
+#     )
+#     va = 'bottom'
+#     for tx,ty,tt in zip(dates_wt, bmus_wt, ys_str):
+#         ax.text(
+#             tx, ty, tt,
+#             {'fontsize':8},
+#             verticalalignment = next(text_cycler_va),
+#             horizontalalignment = next(text_cycler_ha),
+#             rotation=45,
+#         )
+#
+#     # configure axis
+#     ax.set_yticks([])
+#     ax.xaxis.set_major_locator(yloc5)
+#     ax.xaxis.set_minor_locator(yloc1)
+#     ax.xaxis.set_major_formatter(yfmt)
+#     #ax.grid(True, which='both', axis='x', linestyle='--', color='grey')
+#     ax.tick_params(axis='x', which='major', labelsize=8)
+#
+#     # optional parameters
+#     if xticks_clean:
+#         ax.set_xticklabels([])
+#     else:
+#         ax.set_xlabel('Year', {'fontsize':8})
+#
+#     if ylab: ax.set_ylabel(ylab)
+#
+#     if xlims is not None:
+#         ax.set_xlim(xlims[0], xlims[1])
+#
+# def Plot_AWTs_Dates(bmus, dates, n_clusters, show=True):
+#     '''
+#     Plot Annual Weather Types dates
+#
+#     bmus, dates, n_clusters - from KMA_simple()
+#     '''
+#
+#     # get cluster colors
+#     cs_awt = colors_awt()
+#
+#     # plot figure
+#     fig, axs = plt.subplots(nrows=n_clusters)#, figsize=(_faspect*_fsize, _fsize))
+#
+#     # each cluster has a figure
+#     for ic in range(n_clusters):
+#
+#         id_AWT = ic + 1           # cluster ID
+#         index = np.where(bmus==ic)[0][:]
+#         dates_AWT = dates[index]  # cluster dates
+#         bmus_AWT = bmus[index]    # cluster bmus
+#         clr = cs_awt[ic]          # cluster color
+#
+#         ylabel = "WT #{0}".format(id_AWT)
+#         #xlims = [dates[0].astype('datetime64[Y]')-np.timedelta64(3, 'Y'), dates[-1].astype('datetime64[Y]')+np.timedelta64(3, 'Y')]
+#         xlims = [datetime.datetime(1877,1,1),datetime.datetime(2024,1,1)]
+#
+#         xaxis_clean=True
+#         if ic == n_clusters-1:
+#             xaxis_clean=False
+#
+#         # axs plot
+#         axplot_AWT_years(
+#             axs[ic], dates_AWT, bmus_AWT,
+#             clr, xaxis_clean, ylabel, xlims
+#         )
+#         #axs[ic].set_xticks(dates_AWT)
+#     # show and return figure
+#     if show: plt.show()
+#     return fig
