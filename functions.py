@@ -628,10 +628,10 @@ def xds_reindex_flexible(xds_data,  dt_lim1=None, dt_lim2=None,avgTime=None):
 
     # number of days
     # num_days = (xds_dt2-xds_dt1).days+1
-    num_windows = ((xds_dt2-xds_dt1).days)*(24/avgTime)+1
+    num_windows = int(((xds_dt2-xds_dt1).days)*(24/avgTime)+(24/avgTime))
     # reindex xarray.Dataset
     return xds_data.reindex(
-        {'time': [xds_dt1 + timedelta(hours=avgTime) for i in range(num_windows)]},
+        {'time': [xds_dt1 + timedelta(hours=int(avgTime*i)) for i in range(num_windows)]},
         method = 'pad',
     )
 
@@ -653,7 +653,9 @@ def xds_common_dates_flexible(xds_list,avgTime=None):
     limits
     '''
     d1, d2 = xds_limit_dates(xds_list)
-    return [d1 + timedelta(hours=avgTime) for i in range((d2-d1).days*(24/avgTime)+1)]
+    print('d1 = {}'.format(d1))
+    print('d2 = {}'.format(d2))
+    return [d1 + timedelta(hours=int(avgTime*i)) for i in range(int((d2-d1).days*(24/avgTime)+(24/avgTime)))]
 
 def xds_limit_dates(xds_list):
     '''
@@ -1532,7 +1534,7 @@ class ALR_WRP(object):
         # log sim
         self.p_log_sim_xds = op.join(p_base, 'xds_log_sim.nc')
 
-    def SetFitData(self, cluster_size, xds_bmus_fit, d_terms_settings):
+    def SetFitData(self, cluster_size, xds_bmus_fit, d_terms_settings,avgTime):
         '''
         Sets data needed for ALR fitting
 
@@ -1543,12 +1545,12 @@ class ALR_WRP(object):
 
         self.cluster_size = cluster_size
         self.xds_bmus_fit = xds_bmus_fit
-        self.SetFittingTerms(d_terms_settings)
+        self.SetFittingTerms(d_terms_settings,avgTime)
 
         # save bmus series used for fitting
         self.SaveBmus_Fit()
 
-    def SetFittingTerms(self, d_terms_settings):
+    def SetFittingTerms(self, d_terms_settings,avgTime):
         'Set terms settings that will be used for fitting'
 
         # default settings used for ALR terms
@@ -1572,13 +1574,13 @@ class ALR_WRP(object):
         cluster_size = self.cluster_size
 
         self.terms_fit, self.terms_fit_names = self.GenerateALRTerms(
-            d_terms_settings, bmus_fit, time_fit, cluster_size, time2yfrac=True)
+            d_terms_settings, bmus_fit, time_fit, cluster_size, avgTime, time2yfrac=True)
 
         # store data
         self.mk_order = d_terms_settings['mk_order']
         self.d_terms_settings = d_terms_settings
 
-    def GenerateALRTerms(self, d_terms_settings, bmus, time, cluster_size,
+    def GenerateALRTerms(self, d_terms_settings, bmus, time, cluster_size,avgTime,
                          time2yfrac=False):
         'Generate ALR terms from user terms settings'
 
@@ -1588,7 +1590,7 @@ class ALR_WRP(object):
 
         # time options (time has to bee yearly fraction)
         if time2yfrac:
-            time_yfrac = self.GetFracYears(time)
+            time_yfrac = self.GetFracYears(time,avgTime)
         else:
             time_yfrac = time
 
@@ -1712,7 +1714,7 @@ class ALR_WRP(object):
 
         return terms, terms_names
 
-    def GetFracYears(self, time):
+    def GetFracYears(self, time,avgTime):
         'Returns time in custom year decimal format'
 
         # fix np.datetime64
@@ -1746,15 +1748,16 @@ class ALR_WRP(object):
 
         # year_decimal from year start to d1
         delta_y0 = d_1 - d_y0
-        y_fraq_y0 = np.array(range(delta_y0.days+1))/365.25
+        # y_fraq_y0 = np.array(range(delta_y0.days+1))/365.25
+        y_fraq_y0 = np.array(range(int((delta_y0.days)*24/avgTime+24/avgTime)))/(365.25*(24/avgTime))
 
         # cut year_decimal from d_0
-        i0 = (d_0-d_y0).days
+        i0 = int((d_0-d_y0).days*24/avgTime)
         y_fraq = y_fraq_y0[i0:]
 
         return y_fraq
 
-    def GetFracYearsSWT(self, time):
+    def GetFracYearsSWT(self, time,avgTime):
         'Returns time in custom year decimal format'
 
         # fix np.datetime64
@@ -1790,7 +1793,8 @@ class ALR_WRP(object):
 
         # year_decimal from year start to d1
         delta_y0 = d_1 - d_y0
-        y_fraq_y0 = np.array(range(delta_y0.days+1))/365.25
+        # y_fraq_y0 = np.array(range(delta_y0.days+1))/365.25
+        y_fraq_y0 = np.array(range(int((delta_y0.days)*24/avgTime+24/avgTime)))/365.25
 
         # cut year_decimal from d_0
         i0 = (d_0-d_y0).days
@@ -1965,7 +1969,7 @@ class ALR_WRP(object):
         return f
 
     def Simulate(self, num_sims, time_sim, xds_covars_sim=None,
-                 log_sim=False, overfit_filter=False, of_probs=0.98, of_pers=5):
+                 log_sim=False, overfit_filter=False, of_probs=0.98, of_pers=5,avgTime=None):
         '''
         Launch ARL model simulations
 
@@ -2115,8 +2119,8 @@ class ALR_WRP(object):
         print('ALR model fit   : {0} --- {1}'.format(tf0, tf1))
         print('ALR model sim   : {0} --- {1}'.format(ts0, ts1))
         # generate time yearly fractional array
-        # time_yfrac = self.GetFracYears(time_sim)
-        time_yfrac = self.GetFracYearsSWT(time_sim)
+        time_yfrac = self.GetFracYears(time_sim,avgTime)
+        # time_yfrac = self.GetFracYearsSWT(time_sim)
 
         print('{},{},{}'.format(time_yfrac[0],time_yfrac[1],time_yfrac[2]))
 
@@ -2185,7 +2189,7 @@ class ALR_WRP(object):
                     d_terms_settings_sim,
                     np.append(evbmus[ i : i + mk_order], 0),
                     time_yfrac[i : i + mk_order + 1],
-                    self.cluster_size, time2yfrac=False)
+                    self.cluster_size, avgTime, time2yfrac=False)
 
                 # Event sequence simulation  (sklearn)
                 X = np.concatenate(list(terms_i.values()), axis=1)
@@ -2495,9 +2499,9 @@ def PCA_LatitudeAverage(xds, var_name, y1, y2, m1, m2):
     var_val_ra = xds['{0}_runavg'.format(var_name)]
 
     # use datetime for indexing
-    dt1 = datetime.datetime(y1, m1, 1)
-    dt2 = datetime.datetime(y2+1, m2, 28)
-    time_PCA = [datetime.datetime(y, m1, 1) for y in range(y1, y2+1)]
+    dt1 = datetime(y1, m1, 1)
+    dt2 = datetime(y2+1, m2, 28)
+    time_PCA = [datetime(y, m1, 1) for y in range(y1, y2+1)]
 
     # use data inside timeframe
     data_ss = var_val.loc[:,:,dt1:dt2]

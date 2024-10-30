@@ -41,14 +41,40 @@ class climateIndices():
         self.latTop = kwargs.get('latTop', 65)
         self.savePath = kwargs.get('savePath',os.getcwd())
 
-    def atlanticAWT(self,loadPrevious=False,plotOutput=False):
+    def atlanticAWT(self,plotOutput=False,loadPrior=False,loadPickle='./'):
 
+        if loadPrior == True:
+            import numpy as np
+            import pickle
+            with open(loadPickle, "rb") as input_file:
+                awts = pickle.load(input_file)
 
-        if loadPrevious == True:
+            self.pc1Sims = awts['pc1Sims']
+            self.pc2Sims = awts['pc2Sims']
+            self.pc3Sims = awts['pc3Sims']
+            self.evbmus_sim = awts['evbmus_sim']
+            self.dates_sim = awts['dates_sim']
+            self.PC1 = awts['PC1']
+            self.PC2 = awts['PC2']
+            self.PC3 = awts['PC3']
+            self.normPC1 = awts['normPC1']
+            self.normPC2 = awts['normPC2']
+            self.normPC3 = awts['normPC3']
+            self.awt_bmus = awts['awt_bmus']
+            self.annualTime = awts['annualTime']
+            self.dailyAWT = awts['dailyAWT']
+            self.DailyDatesMatrix = awts['DailyDatesMatrix']
+            self.dailyTime = awts['dailyTime']
+            self.dailyPC1 = awts['dailyPC1']
+            self.dailyPC2 = awts['dailyPC2']
+            self.dailyPC3 = awts['dailyPC3']
+            self.nPercent = awts['nPercent']
 
-            print('need to know what variables to load in this space')
+            print('loaded prior AWT processing')
+
 
         else:
+            import numpy as np
             data_folder="/users/dylananderson/Documents/data/ERSSTv5/"
 
 
@@ -579,14 +605,39 @@ class climateIndices():
             # with open(mwtPickle,'wb') as f:
             #     pickle.dump(outputMWTs, f)
 
-    def pacificAWT(self,loadPrevious=False,plotOutput=False):
+    def pacificAWT(self,plotOutput=False,loadPrior=False,loadPickle='./'):
 
+        if loadPrior == True:
+            import numpy as np
+            import pickle
+            with open(loadPickle, "rb") as input_file:
+                awts = pickle.load(input_file)
 
-        if loadPrevious == True:
+            self.pc1Sims = awts['pc1Sims']
+            self.pc2Sims = awts['pc2Sims']
+            self.pc3Sims = awts['pc3Sims']
+            self.evbmus_sim = awts['evbmus_sim']
+            self.dates_sim = awts['dates_sim']
+            self.PC1 = awts['PC1']
+            self.PC2 = awts['PC2']
+            self.PC3 = awts['PC3']
+            self.normPC1 = awts['normPC1']
+            self.normPC2 = awts['normPC2']
+            self.normPC3 = awts['normPC3']
+            self.awt_bmus = awts['awt_bmus']
+            self.annualTime = awts['annualTime']
+            self.dailyAWT = awts['dailyAWT']
+            self.DailyDatesMatrix = awts['DailyDatesMatrix']
+            self.dailyTime = awts['dailyTime']
+            self.dailyPC1 = awts['dailyPC1']
+            self.dailyPC2 = awts['dailyPC2']
+            self.dailyPC3 = awts['dailyPC3']
+            self.nPercent = awts['nPercent']
 
-            print('need to know what variables to load in this space')
+            print('loaded prior AWT processing')
 
         else:
+            import numpy as np
             data_folder="/users/dylananderson/Documents/data/ERSSTv5/"
 
 
@@ -647,9 +698,9 @@ class climateIndices():
             y2 = self.awtEnd
             m1 = 6
             m2 = 5
-            subset = xds_predictor.sel(longitude=slice(120,280),latitude=slice(-5,5))
+            self.subset = xds_predictor.sel(longitude=slice(120,280),latitude=slice(-5,5))
             from functions import PCA_LatitudeAverage
-            predictor = PCA_LatitudeAverage(subset, "SST", self.awtStart, self.awtEnd, 6, 5)
+            self.predictor = PCA_LatitudeAverage(self.subset, "SST", self.awtStart, self.awtEnd-1, 6, 5)
 
 
 
@@ -691,8 +742,8 @@ class climateIndices():
                 annualTime.append(dt)
                 dt += step
 
-            Xs = subset.longitude.values
-            Ys = subset.latitude.values
+            Xs = self.subset.longitude.values
+            Ys = self.subset.latitude.values
             [XR, YR] = np.meshgrid(Xs, Ys)
 
             # if plotOutput:
@@ -733,7 +784,7 @@ class climateIndices():
             #
             # EOFs = ipca.components_
             # variance = ipca.explained_variance_
-            # nPercent = variance / np.sum(variance)
+            nPercent = self.predictor.variance.values / np.sum(self.predictor.variance.values)
             # APEV = np.cumsum(variance) / np.sum(variance) * 100.0
             # nterm = np.where(APEV <= 0.95 * 100)[0][-1]
             #
@@ -753,33 +804,38 @@ class climateIndices():
             # n_clusters = 6
             # kmeans = KMeans(n_clusters, init='k-means++', random_state=100)  # 80
             from functions import KMA_simple
-            clusters = KMA_simple(predictor, 6, repres=0.95)
+            self.clusters = KMA_simple(self.predictor, 6, repres=0.95)
             #
-            # PCs = predictor['PCs'].values
-            # PC1 = PCs[:, 0]
-            # PC2 = PCs[:, 1]
-            # PC3 = PCs[:, 2]
+            PCs = self.predictor['PCs'].values
+            PC1 = PCs[:, 0]
+            PC2 = PCs[:, 1]
+            PC3 = PCs[:, 2]
+            normPC1 = np.divide(PC1, np.nanmax(PC1)) * nPercent[0]
+            normPC2 = np.divide(PC2, np.nanmax(PC2)) * nPercent[1]
+            normPC3 = np.divide(PC3, np.nanmax(PC3)) * nPercent[2]
             #
             #
             # data = pcAggregates
             # data1 = data / np.std(data, axis=0)
             # awt_bmus_og = kmeans.fit_predict(data1)
             # # awt_bmus2 = awt_bmus
-            awt_bmus_og = clusters.bmus
+            awt_bmus_og = self.clusters.bmus
             awt_bmus2 = np.nan * np.ones((np.shape(awt_bmus_og)))
 
             avgSST = []
             for hh in np.unique(awt_bmus_og):
-                indexAWT = np.where(awt_bmus_og == hh)
-                avgSST.append(np.nanmean(clusters.Km[:, indexAWT[0]]))
+                indexAWT = hh#np.where(awt_bmus_og == hh)
+                # avgSST.append(np.nanmean(self.clusters.Km[:, indexAWT[0]]))
+                avgSST.append(np.nanmean(self.clusters.Km[hh,:]))
+
                 #print(np.nanmean(annual[:, indexAWT[0]]))
 
-            order = np.argsort(np.asarray(avgSST))#[0, 4, 5, 3, 2, 1]
+            self.order = np.argsort(np.asarray(avgSST))#[0, 4, 5, 3, 2, 1]
 
-            print(order)
+            print(self.order)
 
             for hh in np.arange(0, 6):
-                indexOR = np.where(awt_bmus_og == order[hh])
+                indexOR = np.where(awt_bmus_og == self.order[hh])
                 awt_bmus2[indexOR] = np.ones((len(indexOR[0], ))) * hh
             awt_bmus = awt_bmus2
 
@@ -789,22 +845,23 @@ class climateIndices():
                 plt.figure()
                 gs2 = gridspec.GridSpec(2, 3)
                 for hh in np.unique(awt_bmus):
-                    indexAWT = np.where(awt_bmus2 == hh)
+                    indexAWT = np.where(self.order == hh)
+                    indexAWT2 = np.where(awt_bmus2 == hh)
                     # rectField = np.nanmean(subset['SST'][:, :, indexAWT[0]], axis=2)
                     # rectField = np.nanmean(tempdata_runavg[:, :, indexAWT[0]], axis=2)
                     ax = plt.subplot(gs2[int(hh)])
-                    Xs = subset.longitude.values
-                    # Ys = subset.latitude.values
+                    Xs = self.subset.longitude.values
+                    Ys = np.arange(0,12) #subset.latitude.values
                     [XR, YR] = np.meshgrid(Xs, Ys)
                     # rectField = np.reshape(np.nanmean(annual[:, indexAWT[0]], axis=1), (int((self.lonRight-self.lonRight)/2+1), ))
-                    rectField = np.reshape(np.nanmean(clusters.Km[:, indexAWT[0]], axis=1), (len(Xs),12))
+                    rectField = np.reshape(self.clusters.Km[indexAWT[0][0],:].values, (12,len(Xs)))
 
                     # m = Basemap(projection='merc', llcrnrlat=0, urcrnrlat=55, llcrnrlon=255, urcrnrlon=375, lat_ts=10,
                     #             resolution='c')
                     # m.drawcoastlines()
                     # cx, cy = m(XR, YR)
-                    # CS = m.contour(cx, cy, rectField.T, np.arange(-0.8, 0.8, .05), cmap=cm.RdBu_r, shading='gouraud')
-                    # ax.set_title('AWT #{} = {} years'.format(int(hh), len(indexAWT[0])))
+                    CS = plt.contourf(XR, YR, rectField, np.arange(-2, 2, .05), cmap=cm.RdBu_r, vmin=-1.5,vmax=1.5,shading='gouraud')
+                    ax.set_title('AWT #{} = {} years'.format(int(hh), len(indexAWT2[0])))
 
                 # plt.colorbar(CS, ax=ax)
 
@@ -831,7 +888,7 @@ class climateIndices():
             # subsetAnnualTime = np.array(annualTime)
             subsetAWT = awt_bmus2[anIndex]
             # subsetPCs = pcAggregates[anIndex[0],:]#PCs[anIndex,:]
-            subsetPCs = PCs[anIndex[0], :]
+            subsetPCs = self.clusters.PCs[anIndex[0], :].values
 
             for i in range(len(subsetAWT)):
                 sSeason = np.where((DailyDatesMatrix[:, 0] == subsetAnnualTime[i].year) & (
@@ -898,8 +955,8 @@ class climateIndices():
             evbmus_sim = evbmus_sim  # evbmus_simALR.T
 
             # Lets make a plot comparing probabilities in sim vs. historical
-            probH = np.nan * np.ones((n_clusters,))
-            probS = np.nan * np.ones((sim_num, n_clusters))
+            probH = np.nan * np.ones((6,))
+            probS = np.nan * np.ones((sim_num, 6))
             for h in np.unique(bmus):
                 findH = np.where((bmus == h))[0][:]
                 probH[int(h - 1)] = len(findH) / len(bmus)
@@ -914,6 +971,7 @@ class climateIndices():
             tccolors = np.flipud(cm.autumn(np.linspace(0, 1, 2)))  # 21)))
             dwtcolors = np.vstack((etcolors, tccolors[1:, :]))
             # dwtcolors = colors_mjo()
+            awtcolors = cm.bwr(np.linspace(0, 1, 6))  # 70-20))
 
             if plotOutput:
                 plt.figure()
@@ -923,12 +981,12 @@ class climateIndices():
                     temp = probS[:, i]
                     temp2 = probH[i]
                     box1 = ax.boxplot(temp, positions=[temp2], widths=.01, notch=True, patch_artist=True, showfliers=False)
-                    plt.setp(box1['boxes'], color=dwtcolors[i])
-                    plt.setp(box1['means'], color=dwtcolors[i])
-                    plt.setp(box1['fliers'], color=dwtcolors[i])
-                    plt.setp(box1['whiskers'], color=dwtcolors[i])
-                    plt.setp(box1['caps'], color=dwtcolors[i])
-                    plt.setp(box1['medians'], color=dwtcolors[i], linewidth=0)
+                    plt.setp(box1['boxes'], color=awtcolors[i])
+                    plt.setp(box1['means'], color=awtcolors[i])
+                    plt.setp(box1['fliers'], color=awtcolors[i])
+                    plt.setp(box1['whiskers'], color=awtcolors[i])
+                    plt.setp(box1['caps'], color=awtcolors[i])
+                    plt.setp(box1['medians'], color=awtcolors[i], linewidth=0)
                     tempPs[i] = np.mean(temp)
                     # box1['boxes'].set(facecolor=dwtcolors[i])
                     # plt.set(box1['fliers'],markeredgecolor=dwtcolors[i])
@@ -1088,12 +1146,35 @@ class climateIndices():
             with open(os.path.join(self.savePath,samplesPickle), 'wb') as f:
                 pickle.dump(outputSamples, f)
 
-    def mjo(self,historicalSimNum,futureSimNum,loadPrevious=False,plotOutput=False):
+    def mjo(self,historicalSimNum,futureSimNum,plotOutput=False,loadPrior=False,loadPickle='./'):
 
+        if loadPrior == True:
+            import numpy as np
+            import pickle
+            with open(loadPickle, "rb") as input_file:
+                mjos = pickle.load(input_file)
 
-        if loadPrevious == True:
+            self.mjoBmus = mjos['mjoBmus']
+            self.mjoGroups = mjos['mjoGroups']
+            self.mjoPhase = mjos['mjoPhase']
+            self.mjoRmm1 = mjos['mjoRmm1']
+            self.mjoRmm2 = mjos['mjoRmm2']
+            self.mjoTime = mjos['mjoTime']
+            self.index = mjos['index']
+            self.mjoYear = mjos['mjoYear']
+            self.mjoDay = mjos['mjoDay']
+            self.mjoMonth = mjos['mjoMonth']
+            self.historicalDatesSim = mjos['historicalDatesSim']
+            self.mjoHistoricalSimRmm1 = mjos['mjoHistoricalSimRmm1']
+            self.mjoHistoricalSimRmm2 = mjos['mjoHistoricalSimRmm2']
+            self.historicalBmusSim = mjos['historicalBmusSim']
+            self.mjoFutureSimRmm1 = mjos['mjoFutureSimRmm1']
+            self.mjoFutureSimRmm2 = mjos['mjoFutureSimRmm2']
+            self.futureBmusSim = mjos['futureBmusSim']
+            self.futureDatesSim = mjos['futureDatesSim']
 
-            print('need to know what variables to load in this space')
+            print('loaded prior MJO processing')
+
 
         else:
             import datetime
@@ -1552,7 +1633,7 @@ class climateIndices():
             # Autoregressive logistic wrapper
             ALRW = ALR_WRP(p_test_ALR)
             ALRW.SetFitData(
-                num_clusters, self.xds_bmus_fit, self.d_terms_settings)
+                num_clusters, self.xds_bmus_fit, self.d_terms_settings,avgTime=24)
 
             ALRW.FitModel(max_iter=2000)
 
@@ -1587,7 +1668,7 @@ class climateIndices():
 
                 #  launch simulation
                 xds_ALR = ALRW.Simulate(
-                    historicalSimNum, dates_sim[0:-1], self.xds_cov_fit)
+                    historicalSimNum, dates_sim[0:-1], self.xds_cov_fit,avgTime=24)
 
                 self.historicalDatesSim = dates_sim
 
@@ -1731,7 +1812,7 @@ class climateIndices():
 
                     #  launch simulation
                     xds_ALRfuture = ALRW.Simulate(
-                        1, self.future_dates_sim, self.xds_cov_sim)
+                        1, self.future_dates_sim, self.xds_cov_sim,avgTime=24)
 
                     self.futureDatesSim = self.future_dates_sim
 
@@ -1770,6 +1851,6 @@ class climateIndices():
                 outputSamples['futureBmusSim'] = self.futureBmusSim
                 outputSamples['futureDatesSim'] = self.futureDatesSim
 
-
+            import pickle
             with open(os.path.join(self.savePath,samplesPickle), 'wb') as f:
                 pickle.dump(outputSamples, f)

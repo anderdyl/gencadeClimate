@@ -46,7 +46,7 @@ wts.pcaOfSlps(loadPrior=True,loadPickle='/volumes/macDrive/va/pcas12hr1degRes.pi
 plotting.plotEOFs(struct=wts)
 
 
-metOcean = getMetOcean(wlPath=wlPath,wisPath=wisPath,startTime=startTime,endTime=endTime,shoreNormal=155)
+metOcean = getMetOcean(wlPath=wlPath,wisPath=wisPath,startTime=startTime,endTime=endTime,shoreNormal=0)
 
 
 stormPickle = '/users/dylananderson/Documents/projects/frf_python_share/stormHs95Over12Hours.pickle'
@@ -70,7 +70,7 @@ metOcean.Dm = inputStorms['combinedDmWIS']
 wts.wtClusters(numClusters=64,minGroupSize=30,TCs=False,RG='waves',Basin=b'NA',alphaRG=0.2,met=metOcean,loadPrior=True,
                loadPickle=os.path.join(savePath,'dwts12hr1degRes64withRG02.pickle'))
 plotting.plotWTs(struct=wts,withTCs=False)
-# plotting.plotSeasonal(struct=wts)
+plotting.plotSeasonal(struct=wts)
 
 metOcean.getWaterLevels()
 
@@ -82,13 +82,22 @@ with open(os.path.join(savePath,'latestData.pickle'), "rb") as input_file:
 climate = priorComputations['climate']
 
 # #
-wts.separateHistoricalHydrographs(metOcean=metOcean)
-wts.metOceanCopulas()
+wts.separateHistoricalHydrographs(metOcean=metOcean,loadPrior=True,loadPickle='/volumes/macDrive/va/hydros.pickle')
+wts.metOceanCopulas(loadPrior=True,loadPickle='/volumes/macDrive/va/copulas.pickle')
 # # #
-wts.alrSimulations(climate=climate,historicalSimNum=10,futureSimNum=10,futureSimStart=2024,futureSimEnd=2124)
-wts.simsFutureInterpolated(simNum=10)
-#
-wts.simsFutureValidated(met=metOcean)
+wts.alrSimulations(climate=climate,historicalSimNum=100,futureSimNum=100,futureSimStart=2024,futureSimEnd=2124)#,
+                   #loadPrior=True,loadPickle='/volumes/macDrive/va/simDwts.pickle')
+# plotting.plotSeasonalValidation(wts,20,12)
+# plotting.plotTotalProbabilityValidation(wts,20)
+# wts.simsFutureInterpolated(simNum=100)
+
+# with open('/volumes/macDrive/va/percentWindows.pickle', "rb") as input_file:
+#    priorComps = pickle.load(input_file)
+# # wts = priorComputations['wts']
+# # duckMET = priorComputations['duckMet']
+# percentWindows = priorComps['percentWindows']
+# wts.simsHistoricalInterpolated(simNum=100,percentWindows=percentWindows)
+# wts.simsFutureValidated(met=metOcean)
 
 # import os
 # import pickle

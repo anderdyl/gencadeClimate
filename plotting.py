@@ -593,6 +593,138 @@ def plotSeasonal(struct):
     ax.set_ylabel('')
 
 
+
+
+def plotSeasonalValidation(struct,numOfSims,avgTime):
+    from datetime import datetime, timedelta
+    import numpy as np
+    import matplotlib.pyplot as plt
+    def GenOneYearDaily(yy=1981, month_ini=1,avgTime=24):
+        'returns one generic year in a list of datetimes. Daily resolution'
+
+        dp1 = datetime(yy, month_ini, 2)
+        dp2 = dp1 + timedelta(days=364)
+
+        return [dp1 + timedelta(hours=int(avgTime)*i) for i in range(int((dp2 - dp1).days*(24/avgTime)))]
+
+    def GenOneSeasonDaily(yy=1981, month_ini=1):
+        'returns one generic year in a list of datetimes. Daily resolution'
+
+        dp1 = datetime(yy, month_ini, 1)
+        dp2 = dp1 + timedelta(3 * 365 / 12)
+
+        return [dp1 + timedelta(days=i) for i in range((dp2 - dp1).days)]
+
+    # tC = [datetime.utcfromtimestamp((qq - np.datetime64(0, 's')) / np.timedelta64(1, 's')) for qq in struct.DATES]
+    # tC = np.asarray(struct.futureDatesSim)
+    tC = np.asarray(struct.historicalDatesSim)
+
+    bmus_dates_months = np.array([d.month for d in tC])
+    bmus_dates_days = np.array([d.day for d in tC])
+    bmus_dates_hours = np.array([d.hour for d in tC])
+
+
+    # generate perpetual year list
+    list_pyear = GenOneYearDaily(month_ini=6,avgTime=avgTime)
+    # m_plot = np.zeros((struct.numClusters, len(list_pyear))) * np.nan
+    m_plot = np.zeros((int(np.max(struct.bmus_corrected)+1), len(list_pyear))) * np.nan
+
+    numberOfSims = numOfSims
+    # compressedBmus = np.hstack(struct.historicalBmusSim)-1
+    compressedBmus = struct.historicalBmusSim-1
+
+    # compressedBmus = [np.vstack((compressedBmus,tt.flatten())) for tt in struct.futureBmusSim]
+    # sort data
+    for i, dpy in enumerate(list_pyear):
+       _, s = np.where(
+          [(bmus_dates_months == dpy.month) & (bmus_dates_days == dpy.day) & (bmus_dates_hours == dpy.hour)]
+       )
+       # b = struct.bmus_corrected[s]
+       b = compressedBmus[s,:]
+       b = b.flatten()
+
+       for j in range(int(np.max(struct.bmus_corrected)+1)):
+          _, bb = np.where([(j == b)])  # j+1 starts at 1 bmus value!
+
+          m_plot[j, i] = float(len(bb) / float(numberOfSims)) / len(s)
+
+    import matplotlib.cm as cm
+    # dwtcolors = cm.viridis(np.linspace(0, 1, struct.numClusters))
+    # dwtcolors = cm.rainbow(np.linspace(0, 1, struct.numClusters))
+    dwtcolors = cm.rainbow(np.linspace(0, 1, int(np.max(struct.bmus_corrected)+1)))
+
+
+    fig = plt.figure()
+    ax = plt.subplot2grid((1,1),(0,0))
+    # plot stacked bars
+    bottom_val = np.zeros(m_plot[1, :].shape)
+    for r in range(int(np.max(struct.bmus_corrected)+1)):
+       row_val = m_plot[r, :]
+       ax.bar(list_pyear, row_val, bottom=bottom_val,width=1, color=np.array([dwtcolors[r]]))
+       # store bottom
+       bottom_val += row_val
+
+    import matplotlib.dates as mdates
+    # customize  axis
+    months = mdates.MonthLocator()
+    monthsFmt = mdates.DateFormatter('%b')
+    ax.set_xlim(list_pyear[0], list_pyear[-1])
+    ax.xaxis.set_major_locator(months)
+    ax.xaxis.set_major_formatter(monthsFmt)
+    ax.set_ylim(0, 1)#struct.endTime[0]-struct.startTime[0])
+    ax.set_ylabel('')
+
+
+def plotTotalProbabilityValidation(struct,simNum):
+    import numpy as np
+    import matplotlib.pyplot as plt
+    import matplotlib.cm as cm
+
+    numClusters = struct.numClusters
+    bmus = struct.bmus_corrected  # [1:]
+    # evbmus_sim = np.hstack(struct.historicalBmusSim)-1 #evbmus_sim  # evbmus_simALR.T
+    evbmus_sim = struct.historicalBmusSim-1 #evbmus_sim  # evbmus_simALR.T
+
+    # Lets make a plot comparing probabilities in sim vs. historical
+    probH = np.nan * np.ones((numClusters,))
+    probS = np.nan * np.ones((simNum, numClusters))
+    for h in np.unique(bmus):
+        findH = np.where((bmus == h))[0][:]
+        probH[int(h)] = len(findH) / len(bmus)
+
+        for s in range(simNum):
+            findS = np.where((evbmus_sim[:,s] == h))[0][:]
+            probS[s, int(h)] = len(findS) / len(evbmus_sim)
+
+
+    # from alrPlotting import colors_mjo
+    # from alrPlotting import colors_awt
+    dwtcolors = cm.rainbow(np.linspace(0, 1, numClusters))  # 70-20))
+
+    plt.figure()
+    ax = plt.subplot2grid((1, 1), (0, 0), rowspan=1, colspan=1)
+    tempPs = np.nan * np.ones((numClusters,))
+    for i in range(numClusters):
+        temp = probS[:, i]
+        temp2 = probH[i]
+        box1 = ax.boxplot(temp, positions=[temp2], widths=.002, notch=True, patch_artist=True, showfliers=False)
+        plt.setp(box1['boxes'], color=dwtcolors[i])
+        plt.setp(box1['means'], color=dwtcolors[i])
+        plt.setp(box1['fliers'], color=dwtcolors[i])
+        plt.setp(box1['whiskers'], color=dwtcolors[i])
+        plt.setp(box1['caps'], color=dwtcolors[i])
+        plt.setp(box1['medians'], color=dwtcolors[i], linewidth=0)
+        tempPs[i] = np.mean(temp)
+        # box1['boxes'].set(facecolor=dwtcolors[i])
+        # plt.set(box1['fliers'],markeredgecolor=dwtcolors[i])
+    ax.plot([0, 0.045], [0, 0.045], 'k--', zorder=10)
+    plt.xlim([0, 0.045])
+    plt.ylim([0, 0.045])
+    plt.xticks([0, 0.025], ['0', '0.025'])
+    plt.xlabel('Historical Probability')
+    plt.ylabel('Simulated Probability')
+    plt.title('Validation of ALR DWT Simulations')
+    return probH, probS
 #
 #
 # def axplot_AWT_2D(ax, var_2D, num_wts, id_wt, color_wt):
