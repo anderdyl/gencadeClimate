@@ -911,7 +911,11 @@ class getMetOcean():
         self.wmb = WMB.flatten()
 
 
-    def getYearlyERA5WavesAndWindsAndTemps(self,printToScreen=False):
+
+
+
+
+    def getYearlyERA5Waves(self,printToScreen=False):
         from datetime import datetime, date
         from dateutil.relativedelta import relativedelta
 
@@ -953,9 +957,9 @@ class getMetOcean():
                     params = {
                         "format": "netcdf",
                         "product_type": "reanalysis",
-                        "variable": ['significant_height_of_combined_wind_waves_and_swell', 'mean_wave_period',
-                                    'mean_wave_direction', '10m_u_component_of_wind', '10m_v_component_of_wind',
-                                    '2m_temperature', 'sea_surface_temperature', 'surface_net_solar_radiation'],
+                        "variable": ['significant_height_of_combined_wind_waves_and_swell', 'mean_wave_period'],
+                                    #'mean_wave_direction', '10m_u_component_of_wind', '10m_v_component_of_wind',
+                                    #'2m_temperature', 'sea_surface_temperature', 'surface_net_solar_radiation'],
                         'year': [str(self.endTime[0])],
                         'month': [str(ttt+1), ],
                         'day': ['01', '02', '03',
@@ -981,60 +985,79 @@ class getMetOcean():
                         ],
                         "area": [self.latTop, self.lonLeft, self.latBot, self.lonRight],
                     }
+                    # # retrieves the path to the file
+                    # fl = cds.retrieve(dataset, params)
+                    # # download the file
+                    # if download_flag:
+                    #     fl.download("./output.nc")
+                    # # load into memory
+                    # with urlopen(fl.location) as f:
+                    #     ds = xr.open_dataset(f.read())
+
                     # retrieves the path to the file
-                    fl = cds.retrieve(dataset, params)
-                    # download the file
-                    if download_flag:
-                        fl.download("./output.nc")
+                    # fl = cds.retrieve(dataset, params)
+                    cds.retrieve(dataset, params, os.path.join(self.savePath, "wavesYearly{}_{}".format(extractTime[hh].year,
+                                                                                                  extractTime[
+                                                                                                      hh].month)))
+
+                    # # download the file
+                    # if download_flag:
+                    #     fl.download("./output.nc")
                     # load into memory
-                    with urlopen(fl.location) as f:
-                        ds = xr.open_dataset(f.read())
+                    # with urlopen(fl.location) as f:
+                    #     ds = xr.open_dataset(f.read())
+                    # with open("./output.nc", "rb") as f:
+                    #     ds = xr.open_dataset(f)
+                    ds = xr.open_dataset(os.path.join(self.savePath, "wavesYearly{}_{}".format(extractTime[hh].year,
+                                                                                         extractTime[
+                                                                                             hh].month)))  # ,engine='netcdf4')
+
 
                     m, n, p = np.shape(ds.swh)
                     SWH = np.zeros((n * p, m))
                     MWP = np.zeros((n * p, m))
                     MWD = np.zeros((n * p, m))
-                    U10 = np.zeros((n * p, m))
-                    V10 = np.zeros((n * p, m))
-                    T2M = np.zeros((n * p, m))
-                    SST = np.zeros((n * p, m))
-                    SSR = np.zeros((n * p, m))
+                    # U10 = np.zeros((n * p, m))
+                    # V10 = np.zeros((n * p, m))
+                    # T2M = np.zeros((n * p, m))
+                    # SST = np.zeros((n * p, m))
+                    # SSR = np.zeros((n * p, m))
 
                     for mmm in range(m):
                         SWH[:, mmm] = ds.swh[mmm, :, :].values.flatten()
                         MWP[:, mmm] = ds.mwp[mmm, :, :].values.flatten()
                         MWD[:, mmm] = ds.mwd[mmm, :, :].values.flatten()
-                        U10[:, mmm] = ds.u10[mmm, :, :].values.flatten()
-                        V10[:, mmm] = ds.v10[mmm, :, :].values.flatten()
-                        T2M[:, mmm] = ds.t2m[mmm, :, :].values.flatten()
-                        SST[:, mmm] = ds.sst[mmm, :, :].values.flatten()
-                        SSR[:, mmm] = ds.ssr[mmm, :, :].values.flatten()
+                        # U10[:, mmm] = ds.u10[mmm, :, :].values.flatten()
+                        # V10[:, mmm] = ds.v10[mmm, :, :].values.flatten()
+                        # T2M[:, mmm] = ds.t2m[mmm, :, :].values.flatten()
+                        # SST[:, mmm] = ds.sst[mmm, :, :].values.flatten()
+                        # SSR[:, mmm] = ds.ssr[mmm, :, :].values.flatten()
 
                     if counter == 0:
-                        tC = ds.time.values
+                        tC = ds.valid_time.values
                         Dm = MWD
                         Tp = MWP
                         Hs = SWH
-                        u10 = U10
-                        v10 = V10
-                        t2m = T2M
-                        sst = SST
-                        ssr = SSR
+                        # u10 = U10
+                        # v10 = V10
+                        # t2m = T2M
+                        # sst = SST
+                        # ssr = SSR
 
                     else:
-                        tC = np.hstack((tC, ds.time.values))
+                        tC = np.hstack((tC, ds.valid_time.values))
                         Dm = np.hstack((Dm, MWD))
                         Tp = np.hstack((Tp, MWP))
                         Hs = np.hstack((Hs, SWH))
-                        u10 = np.hstack((u10, U10))
-                        v10 = np.hstack((v10, V10))
-                        t2m = np.hstack((t2m, T2M))
-                        sst = np.hstack((sst, SST))
-                        ssr = np.hstack((ssr, SSR))
+                        # u10 = np.hstack((u10, U10))
+                        # v10 = np.hstack((v10, V10))
+                        # t2m = np.hstack((t2m, T2M))
+                        # sst = np.hstack((sst, SST))
+                        # ssr = np.hstack((ssr, SSR))
 
                     counter = counter + 1
 
-                print('Extracted until {}-{}'.format(year2, month2))
+                # print('Extracted until {}-{}'.format(year2, month2))
 
 
             else:
@@ -1050,7 +1073,7 @@ class getMetOcean():
                 params = {
                     "format": "netcdf",
                     "product_type": "reanalysis",
-                    "variable": ['significant_height_of_combined_wind_waves_and_swell','mean_wave_period','mean_wave_direction','10m_u_component_of_wind','10m_v_component_of_wind', '2m_temperature','sea_surface_temperature', 'surface_net_solar_radiation'],
+                    "variable": ['significant_height_of_combined_wind_waves_and_swell','mean_wave_period','mean_wave_direction'],#'10m_u_component_of_wind','10m_v_component_of_wind', '2m_temperature','sea_surface_temperature', 'surface_net_solar_radiation'],
                     'year': [str(extractTime[hh].year)],
                     'month': ['01', '02', '03','04', '05', '06','07', '08', '09','10', '11', '12',],
                     'day': ['01', '02', '03',
@@ -1076,70 +1099,86 @@ class getMetOcean():
                     ],
                     "area": [self.latTop, self.lonLeft, self.latBot, self.lonRight],
                 }
+                # # retrieves the path to the file
+                # fl = cds.retrieve(dataset, params)
+                # # download the file
+                # if download_flag:
+                #     fl.download("./output.nc")
+                # # load into memory
+                # with urlopen(fl.location) as f:
+                #     ds = xr.open_dataset(f.read())
+
                 # retrieves the path to the file
-                fl = cds.retrieve(dataset, params)
-                # download the file
-                if download_flag:
-                    fl.download("./output.nc")
+                # fl = cds.retrieve(dataset, params)
+                cds.retrieve(dataset, params, os.path.join(self.savePath, "wavesYearly{}_{}".format(extractTime[hh].year,
+                                                                                              extractTime[hh].month)))
+
+                # # download the file
+                # if download_flag:
+                #     fl.download("./output.nc")
                 # load into memory
-                with urlopen(fl.location) as f:
-                    ds = xr.open_dataset(f.read())
+                # with urlopen(fl.location) as f:
+                #     ds = xr.open_dataset(f.read())
+                # with open("./output.nc", "rb") as f:
+                #     ds = xr.open_dataset(f)
+                ds = xr.open_dataset(os.path.join(self.savePath, "wavesYearly{}_{}".format(extractTime[hh].year, extractTime[
+                    hh].month)))  # ,engine='netcdf4')
 
                 m, n, p = np.shape(ds.swh)
                 SWH = np.zeros((n * p, m))
                 MWP = np.zeros((n * p, m))
                 MWD = np.zeros((n * p, m))
-                U10 = np.zeros((n * p, m))
-                V10 = np.zeros((n * p, m))
-                T2M = np.zeros((n * p, m))
-                SST = np.zeros((n * p, m))
-                SSR = np.zeros((n * p, m))
+                # U10 = np.zeros((n * p, m))
+                # V10 = np.zeros((n * p, m))
+                # T2M = np.zeros((n * p, m))
+                # SST = np.zeros((n * p, m))
+                # SSR = np.zeros((n * p, m))
 
                 for mmm in range(m):
                     SWH[:,mmm] = ds.swh[mmm, :, :].values.flatten()
                     MWP[:,mmm] = ds.mwp[mmm, :, :].values.flatten()
                     MWD[:,mmm] = ds.mwd[mmm, :, :].values.flatten()
-                    U10[:,mmm] = ds.u10[mmm, :, :].values.flatten()
-                    V10[:,mmm] = ds.v10[mmm, :, :].values.flatten()
-                    T2M[:,mmm] = ds.t2m[mmm, :, :].values.flatten()
-                    SST[:,mmm] = ds.sst[mmm, :, :].values.flatten()
-                    SSR[:,mmm] = ds.ssr[mmm, :, :].values.flatten()
+                    # U10[:,mmm] = ds.u10[mmm, :, :].values.flatten()
+                    # V10[:,mmm] = ds.v10[mmm, :, :].values.flatten()
+                    # T2M[:,mmm] = ds.t2m[mmm, :, :].values.flatten()
+                    # SST[:,mmm] = ds.sst[mmm, :, :].values.flatten()
+                    # SSR[:,mmm] = ds.ssr[mmm, :, :].values.flatten()
 
                 if counter == 0:
-                    tC = ds.time.values
+                    tC = ds.valid_time.values
                     Dm = MWD
                     Tp = MWP
                     Hs = SWH
-                    u10 = U10
-                    v10 = V10
-                    t2m = T2M
-                    sst = SST
-                    ssr = SSR
+                    # u10 = U10
+                    # v10 = V10
+                    # t2m = T2M
+                    # sst = SST
+                    # ssr = SSR
 
                 else:
-                    tC = np.hstack((tC,ds.time.values))
+                    tC = np.hstack((tC,ds.valid_time.values))
                     Dm = np.hstack((Dm,MWD))
                     Tp = np.hstack((Tp,MWP))
                     Hs = np.hstack((Hs,SWH))
-                    u10 = np.hstack((u10,U10))
-                    v10 = np.hstack((v10,V10))
-                    t2m = np.hstack((t2m,T2M))
-                    sst = np.hstack((sst,SST))
-                    ssr = np.hstack((ssr,SSR))
+                    # u10 = np.hstack((u10,U10))
+                    # v10 = np.hstack((v10,V10))
+                    # t2m = np.hstack((t2m,T2M))
+                    # sst = np.hstack((sst,SST))
+                    # ssr = np.hstack((ssr,SSR))
 
                 counter = counter + 1
 
-            print('Extracted until {}-{}'.format(year2, month2))
+            # print('Extracted until {}-{}'.format(year2, month2))
 
         self.timeWave = tC
         self.Hs = Hs.flatten()
         self.Tp = Tp.flatten()
         self.Dm = Dm.flatten()
-        self.timeWind = tC
-        self.u10 = u10.flatten()
-        self.v10 = v10.flatten()
-        self.t2m = t2m.flatten()
-        self.sst = sst.flatten()
-        self.ssr = ssr.flatten()
+        # self.timeWind = tC
+        # self.u10 = u10.flatten()
+        # self.v10 = v10.flatten()
+        # self.t2m = t2m.flatten()
+        # self.sst = sst.flatten()
+        # self.ssr = ssr.flatten()
 
 
