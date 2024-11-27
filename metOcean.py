@@ -1716,3 +1716,269 @@ class getMetOcean():
         # self.sst = sst.flatten()
         # self.ssr = ssr.flatten()
 
+
+    def getTriMonthlyERA5Atms(self,printToScreen=False):
+        from datetime import datetime, date
+        from dateutil.relativedelta import relativedelta
+
+        year = self.startTime[0]
+        month = self.startTime[1]
+        year2 = self.endTime[0]
+        month2 = self.endTime[1]
+        print('Starting extract at {}-{}'.format(year, month))
+
+        dt = date(self.startTime[0], self.startTime[1], self.startTime[2])
+        end = date(self.endTime[0], self.endTime[1], self.endTime[2])
+        step = relativedelta(months=3)
+        extractTime = []
+        while dt < end:
+            extractTime.append(dt)  # .strftime('%Y-%m-%d'))
+            dt += step
+
+        print(extractTime)
+
+        import cdsapi
+        import xarray as xr
+        from urllib.request import urlopen
+
+        counter = 0
+        for hh in range(len(extractTime)):
+
+            if extractTime[hh].year == self.endTime[0]:
+                for ttt in range(self.endTime[1]):
+                    if printToScreen == True:
+                        print('Now at the monthly scale: {}-{}'.format(extractTime[hh].year, ttt+1))
+
+                    # start the client
+                    cds = cdsapi.Client()
+                    # dataset you want to read
+                    dataset = 'reanalysis-era5-single-levels'
+                    # flag to download data
+                    download_flag = False
+                    # api parameters
+                    params = {
+                        "format": "netcdf",
+                        "product_type": "reanalysis",
+                        "variable": ['10m_u_component_of_wind', '10m_v_component_of_wind',
+                                    '2m_temperature'],# 'sea_surface_temperature', 'surface_net_solar_radiation'],
+                        'year': [str(self.endTime[0])],
+                        'month': [str(ttt+1), ],
+                        'day': ['01', '02', '03',
+                                '04', '05', '06',
+                                '07', '08', '09',
+                                '10', '11', '12',
+                                '13', '14', '15',
+                                '16', '17', '18',
+                                '19', '20', '21',
+                                '22', '23', '24',
+                                '25', '26', '27',
+                                '28', '29', '30',
+                                '31', ],
+                        "time": [
+                            '00:00', '01:00', '02:00',
+                            '03:00', '04:00', '05:00',
+                            '06:00', '07:00', '08:00',
+                            '09:00', '10:00', '11:00',
+                            '12:00', '13:00', '14:00',
+                            '15:00', '16:00', '17:00',
+                            '18:00', '19:00', '20:00',
+                            '21:00', '22:00', '23:00',
+                        ],
+                        "area": [self.latTop, self.lonLeft, self.latBot, self.lonRight],
+                    }
+                    # # retrieves the path to the file
+                    # fl = cds.retrieve(dataset, params)
+                    # # download the file
+                    # if download_flag:
+                    #     fl.download("./output.nc")
+                    # # load into memory
+                    # with urlopen(fl.location) as f:
+                    #     ds = xr.open_dataset(f.read())
+
+                    # retrieves the path to the file
+                    # fl = cds.retrieve(dataset, params)
+                    cds.retrieve(dataset, params, os.path.join(self.savePath, "winds{}_{}.nc".format(extractTime[hh].year,
+                                                                                                  extractTime[
+                                                                                                      hh].month)))
+
+                    # # download the file
+                    # if download_flag:
+                    #     fl.download("./output.nc")
+                    # load into memory
+                    # with urlopen(fl.location) as f:
+                    #     ds = xr.open_dataset(f.read())
+                    # with open("./output.nc", "rb") as f:
+                    #     ds = xr.open_dataset(f)
+                    ds = xr.open_dataset(os.path.join(self.savePath, "winds{}_{}.nc".format(extractTime[hh].year,
+                                                                                         extractTime[
+                                                                                             hh].month)))  # ,engine='netcdf4')
+
+
+                    m, n, p = np.shape(ds.u10)
+                    # SWH = np.zeros((n * p, m))
+                    # MWP = np.zeros((n * p, m))
+                    # MWD = np.zeros((n * p, m))
+                    U10 = np.zeros((n * p, m))
+                    V10 = np.zeros((n * p, m))
+                    T2M = np.zeros((n * p, m))
+                    # SST = np.zeros((n * p, m))
+                    # SSR = np.zeros((n * p, m))
+
+                    for mmm in range(m):
+                        # SWH[:, mmm] = ds.swh[mmm, :, :].values.flatten()
+                        # MWP[:, mmm] = ds.mwp[mmm, :, :].values.flatten()
+                        # MWD[:, mmm] = ds.mwd[mmm, :, :].values.flatten()
+                        U10[:, mmm] = ds.u10[mmm, :, :].values.flatten()
+                        V10[:, mmm] = ds.v10[mmm, :, :].values.flatten()
+                        T2M[:, mmm] = ds.t2m[mmm, :, :].values.flatten()
+                        # SST[:, mmm] = ds.sst[mmm, :, :].values.flatten()
+                        # SSR[:, mmm] = ds.ssr[mmm, :, :].values.flatten()
+
+                    if counter == 0:
+                        tC = ds.valid_time.values
+                        # Dm = MWD
+                        # Tp = MWP
+                        # Hs = SWH
+                        u10 = U10
+                        v10 = V10
+                        t2m = T2M
+                        # sst = SST
+                        # ssr = SSR
+
+                    else:
+                        tC = np.hstack((tC, ds.valid_time.values))
+                        # Dm = np.hstack((Dm, MWD))
+                        # Tp = np.hstack((Tp, MWP))
+                        # Hs = np.hstack((Hs, SWH))
+                        u10 = np.hstack((u10, U10))
+                        v10 = np.hstack((v10, V10))
+                        t2m = np.hstack((t2m, T2M))
+                        # sst = np.hstack((sst, SST))
+                        # ssr = np.hstack((ssr, SSR))
+
+                    counter = counter + 1
+
+                # print('Extracted until {}-{}'.format(year2, month2))
+
+
+            else:
+                if printToScreen == True:
+                    print('{}-{}'.format(extractTime[hh].year, extractTime[hh].month))
+                # start the client
+                cds = cdsapi.Client()
+                # dataset you want to read
+                dataset = 'reanalysis-era5-single-levels'
+                # flag to download data
+                download_flag = False
+                # api parameters
+                params = {
+                    "format": "netcdf",
+                    "product_type": "reanalysis",
+                    "variable": ['10m_u_component_of_wind','10m_v_component_of_wind', '2m_temperature'],
+                    'year': [str(extractTime[hh].year)],
+                    # 'month': ['01', '02', '03','04', '05', '06','07', '08', '09','10', '11', '12',],
+                    'month': [str(extractTime[hh].month + 0),str(extractTime[hh].month + 1),str(extractTime[hh].month + 2)],
+                    'day': ['01', '02', '03',
+                            '04', '05', '06',
+                            '07', '08', '09',
+                            '10', '11', '12',
+                            '13', '14', '15',
+                            '16', '17', '18',
+                            '19', '20', '21',
+                            '22', '23', '24',
+                            '25', '26', '27',
+                            '28', '29', '30',
+                            '31', ],
+                    "time": [
+                        '00:00', '01:00', '02:00',
+                        '03:00', '04:00', '05:00',
+                        '06:00', '07:00', '08:00',
+                        '09:00', '10:00', '11:00',
+                        '12:00', '13:00', '14:00',
+                        '15:00', '16:00', '17:00',
+                        '18:00', '19:00', '20:00',
+                        '21:00', '22:00', '23:00',
+                    ],
+                    "area": [self.latTop, self.lonLeft, self.latBot, self.lonRight],
+                }
+                # # retrieves the path to the file
+                # fl = cds.retrieve(dataset, params)
+                # # download the file
+                # if download_flag:
+                #     fl.download("./output.nc")
+                # # load into memory
+                # with urlopen(fl.location) as f:
+                #     ds = xr.open_dataset(f.read())
+
+                # retrieves the path to the file
+                # fl = cds.retrieve(dataset, params)
+                cds.retrieve(dataset, params, os.path.join(self.savePath, "winds{}_{}.nc".format(extractTime[hh].year,
+                                                                                              extractTime[hh].month)))
+
+                # # download the file
+                # if download_flag:
+                #     fl.download("./output.nc")
+                # load into memory
+                # with urlopen(fl.location) as f:
+                #     ds = xr.open_dataset(f.read())
+                # with open("./output.nc", "rb") as f:
+                #     ds = xr.open_dataset(f)
+                ds = xr.open_dataset(os.path.join(self.savePath, "winds{}_{}.nc".format(extractTime[hh].year, extractTime[
+                    hh].month)))  # ,engine='netcdf4')
+
+                m, n, p = np.shape(ds.u10)
+                # SWH = np.zeros((n * p, m))
+                # MWP = np.zeros((n * p, m))
+                # MWD = np.zeros((n * p, m))
+                U10 = np.zeros((n * p, m))
+                V10 = np.zeros((n * p, m))
+                T2M = np.zeros((n * p, m))
+                # SST = np.zeros((n * p, m))
+                # SSR = np.zeros((n * p, m))
+
+                for mmm in range(m):
+                    # SWH[:,mmm] = ds.swh[mmm, :, :].values.flatten()
+                    # MWP[:,mmm] = ds.mwp[mmm, :, :].values.flatten()
+                    # MWD[:,mmm] = ds.mwd[mmm, :, :].values.flatten()
+                    U10[:,mmm] = ds.u10[mmm, :, :].values.flatten()
+                    V10[:,mmm] = ds.v10[mmm, :, :].values.flatten()
+                    T2M[:,mmm] = ds.t2m[mmm, :, :].values.flatten()
+                    # SST[:,mmm] = ds.sst[mmm, :, :].values.flatten()
+                    # SSR[:,mmm] = ds.ssr[mmm, :, :].values.flatten()
+
+                if counter == 0:
+                    tC = ds.valid_time.values
+                    # Dm = MWD
+                    # Tp = MWP
+                    # Hs = SWH
+                    u10 = U10
+                    v10 = V10
+                    t2m = T2M
+                    # sst = SST
+                    # ssr = SSR
+
+                else:
+                    tC = np.hstack((tC,ds.valid_time.values))
+                    # Dm = np.hstack((Dm,MWD))
+                    # Tp = np.hstack((Tp,MWP))
+                    # Hs = np.hstack((Hs,SWH))
+                    u10 = np.hstack((u10,U10))
+                    v10 = np.hstack((v10,V10))
+                    t2m = np.hstack((t2m,T2M))
+                    # sst = np.hstack((sst,SST))
+                    # ssr = np.hstack((ssr,SSR))
+
+                counter = counter + 1
+
+            # print('Extracted until {}-{}'.format(year2, month2))
+
+        self.timeWave = tC
+        # self.Hs = Hs.flatten()
+        # self.Tp = Tp.flatten()
+        # self.Dm = Dm.flatten()
+        # self.timeWind = tC
+        self.u10 = u10.flatten()
+        self.v10 = v10.flatten()
+        self.t2m = t2m.flatten()
+        # self.sst = sst.flatten()
+        # self.ssr = ssr.flatten()

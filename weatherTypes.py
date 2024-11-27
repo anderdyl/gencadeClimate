@@ -754,7 +754,16 @@ class weatherTypes():
             APEV = np.cumsum(variance) / np.sum(variance) * 100.0
             nterm = np.where(APEV <= 0.95 * 100)[0][-1]
 
-
+            self.SlpGrdMean = SlpGrdMean
+            self.SlpGrdStd = SlpGrdStd
+            self.SlpGrdNorm = SlpGrdNorm
+            self.SlpGrd = SlpGrd
+            self.PCs = PCs
+            self.EOFs = EOFs
+            self.variance = variance
+            self.nPercent = nPercent
+            self.APEV = APEV
+            self.nterm = nterm
 
             import pickle
             samplesPickle = 'pcas.pickle'
