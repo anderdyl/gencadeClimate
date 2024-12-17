@@ -70,6 +70,10 @@ metOcean.Dm = inputStorms['combinedDmWIS']
 wts.wtClusters(numClusters=64,minGroupSize=30,TCs=False,RG='waves',Basin=b'NA',alphaRG=0.2,met=metOcean,loadPrior=True,
                loadPickle=os.path.join(savePath,'dwts12hr1degRes64withRG02.pickle'))
 plotting.plotWTs(struct=wts,withTCs=False)
+
+
+asdfg
+
 plotting.plotSeasonal(struct=wts)
 
 metOcean.getWaterLevels()
