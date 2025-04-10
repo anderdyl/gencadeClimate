@@ -52,8 +52,10 @@ class climateIndices():
             self.pc1Sims = awts['pc1Sims']
             self.pc2Sims = awts['pc2Sims']
             self.pc3Sims = awts['pc3Sims']
-            self.evbmus_sim = awts['evbmus_sim']
-            self.dates_sim = awts['dates_sim']
+            # self.evbmus_sim = awts['evbmus_sim']
+            # self.dates_sim = awts['dates_sim']
+            self.awtBmusSim = awts['evbmus_sim']
+            self.awtDatesSim = awts['dates_sim']
             self.PC1 = awts['PC1']
             self.PC2 = awts['PC2']
             self.PC3 = awts['PC3']
@@ -63,7 +65,7 @@ class climateIndices():
             self.awt_bmus = awts['awt_bmus']
             self.annualTime = awts['annualTime']
             self.dailyAWT = awts['dailyAWT']
-            self.DailyDatesMatrix = awts['DailyDatesMatrix']
+            self.DailyDatesMatrix = awts['dailyDates']
             self.dailyTime = awts['dailyTime']
             self.dailyPC1 = awts['dailyPC1']
             self.dailyPC2 = awts['dailyPC2']
@@ -354,7 +356,7 @@ class climateIndices():
             #             chain3[(key1, key2, key3)].append(word)
             # print('Chain size: {0} distinct bmu pairs.'.format(len(chain3)))
             print(chain)
-            sim_num = 100
+            sim_num = 500
             sim_years = 500
             evbmus_sim = np.nan * np.ones((sim_num, (sim_years)))
             key = (awt_bmus[-2], awt_bmus[-1])
@@ -616,8 +618,8 @@ class climateIndices():
             self.pc1Sims = awts['pc1Sims']
             self.pc2Sims = awts['pc2Sims']
             self.pc3Sims = awts['pc3Sims']
-            self.evbmus_sim = awts['evbmus_sim']
-            self.dates_sim = awts['dates_sim']
+            self.awtBmusSim = awts['awtBmusSim']
+            self.awtDatesSim = awts['awtDatesSim']
             self.PC1 = awts['PC1']
             self.PC2 = awts['PC2']
             self.PC3 = awts['PC3']
@@ -627,7 +629,7 @@ class climateIndices():
             self.awt_bmus = awts['awt_bmus']
             self.annualTime = awts['annualTime']
             self.dailyAWT = awts['dailyAWT']
-            self.DailyDatesMatrix = awts['DailyDatesMatrix']
+            self.DailyDatesMatrix = awts['dailyDates']
             self.dailyTime = awts['dailyTime']
             self.dailyPC1 = awts['dailyPC1']
             self.dailyPC2 = awts['dailyPC2']
@@ -1125,8 +1127,8 @@ class climateIndices():
             outputSamples['pc1Sims'] = pc1Sims
             outputSamples['pc2Sims'] = pc2Sims
             outputSamples['pc3Sims'] = pc3Sims
-            outputSamples['evbmus_sim'] = evbmus_sim
-            outputSamples['dates_sim'] = dates_sim
+            outputSamples['awtBmusSim'] = evbmus_sim
+            outputSamples['awtDatesSim'] = dates_sim
             outputSamples['PC1'] = PC1
             outputSamples['PC2'] = PC2
             outputSamples['PC3'] = PC3
@@ -1618,7 +1620,7 @@ class climateIndices():
 
             # Autoregressive logistic wrapper
             num_clusters = 25
-            sim_num = 100
+            sim_num = 500
             fit_and_save = True  # False for loading
             p_test_ALR = '/Users/dylananderson/Documents/duneLifeCycles/'
 
@@ -1741,10 +1743,10 @@ class climateIndices():
                     dailyPC2sim = np.ones((len(trainingDates),))
                     dailyPC3sim = np.ones((len(trainingDates),))
 
-                    awtBMUsim = self.awtBmusSim[simIndex][0:100]  # [0:len(awt_bmus)]
-                    awtPC1sim = self.pc1Sims[simIndex][0:100]  # [0:len(awt_bmus)]
-                    awtPC2sim = self.pc2Sims[simIndex][0:100]  # [0:len(awt_bmus)]
-                    awtPC3sim = self.pc3Sims[simIndex][0:100]  # [0:len(awt_bmus)]
+                    awtBMUsim = self.awtBmusSim[simIndex]#[0:100]  # [0:len(awt_bmus)]
+                    awtPC1sim = self.pc1Sims[simIndex]#[0:100]  # [0:len(awt_bmus)]
+                    awtPC2sim = self.pc2Sims[simIndex]#[0:100]  # [0:len(awt_bmus)]
+                    awtPC3sim = self.pc3Sims[simIndex]#[0:100]  # [0:len(awt_bmus)]
                     dailyDatesSWTyear = np.array([r[0] for r in simDailyDatesMatrix])
                     dailyDatesSWTmonth = np.array([r[1] for r in simDailyDatesMatrix])
                     dailyDatesSWTday = np.array([r[2] for r in simDailyDatesMatrix])
@@ -1752,7 +1754,7 @@ class climateIndices():
                     normPC2 = awtPC2sim
                     normPC3 = awtPC3sim
 
-                    for i in range(len(awtBMUsim)):
+                    for i in range(100):
                         sSeason = np.where((simDailyDatesMatrix[:, 0] == simAnnualTime[i].year) & (
                                 simDailyDatesMatrix[:, 1] == simAnnualTime[i].month) & (simDailyDatesMatrix[:, 2] == 1))
                         ssSeason = np.where((simDailyDatesMatrix[:, 0] == simAnnualTime[i].year + 1) & (

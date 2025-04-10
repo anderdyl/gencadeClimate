@@ -74,55 +74,266 @@ class getMetOcean():
         self.timeWL = tWaterLevelFRF
 
 
+    def getDailySurge(self,latSS,lonSS,wts, loadPrior = False,loadPickle = './'):
 
-    def getWISLocal(self):
+        if loadPrior == True:
+            import numpy as np
+            import pickle
+            with open(loadPickle, "rb") as input_file:
+                cops = pickle.load(input_file)
+            self.resWl = cops['resWl']
+            self.timeWL = cops['timeWL']
+            print('loaded prior water levels')
 
-        # LOADING THE WIS FILES
-        # Need to sort the files to ensure correct temporal order...
-        waveFiles = os.listdir(self.wisPath)
-        waveFiles.sort()
-        waveFiles_path = [os.path.join(os.path.abspath(self.wisPath), x) for x in waveFiles]
+        else:
+            import numpy as np
+            print('Getting closest GTSM node')
+
+            # latSS = 39.1667
+            # lonSS = -74.3333
+
+            import netCDF4
+            nc = netCDF4.Dataset('/Users/dylananderson/Downloads/surge_daily_max.nc')
+            xCoords = nc.variables['station_x_coordinate'][:]
+            yCoords = nc.variables['station_y_coordinate'][:]
+
+            import datetime as dt
+            st = dt.datetime(1979, 1, 1)
+            end = dt.datetime(2015, 1, 1)
+            from dateutil.relativedelta import relativedelta
+            step = relativedelta(days=1)
+            dailyTimeEval = []
+            while st < end:
+                dailyTimeEval.append(st)  # .strftime('%Y-%m-%d'))
+                st += step
 
 
-        fileDates = []
-        for hh in range(len(waveFiles)):
-            fileYear = int(waveFiles[hh].split('_')[-1].split('.')[0][0:4])
-            fileMonth = int(waveFiles[hh].split('_')[-1].split('.')[0][4:6])
-            fileDates.append(datetime(fileYear,fileMonth,1))
 
-        ind = np.where((np.asarray(fileDates) >= datetime(self.startTime[0],self.startTime[1],1)) & (np.asarray(fileDates) <= datetime(self.endTime[0],self.endTime[1],1)))
+            from math import cos, asin, sqrt
 
-        waveFiles = np.asarray(waveFiles)[ind]
-        waveFiles_path =np.asarray( waveFiles_path)[ind]
+            def distance(lat1, lon1, lat2, lon2):
+                p = 0.017453292519943295
+                hav = 0.5 - cos((lat2 - lat1) * p) / 2 + cos(lat1 * p) * cos(lat2 * p) * (1 - cos((lon2 - lon1) * p)) / 2
+                return 12742 * asin(sqrt(hav))
 
-        Hs = []
-        Tp = []
-        Dm = []
-        timeWave = []
-        for i in waveFiles_path:
-            waves = loadWIS(i)
-            Hs = np.append(Hs, waves['waveHs'])
-            Tp = np.append(Tp, waves['waveTp'])
-            Dm = np.append(Dm, waves['waveMeanDirection'])
-            timeWave = np.append(timeWave, waves['t'].flatten())
+            tempDataList = [{'lat':yCoords[pp], 'lon':xCoords[pp]} for pp in range(len(xCoords))]
+            def closest(data, v):
+                return min(data, key=lambda p: distance(v['lat'], v['lon'], p['lat'], p['lon']))
 
-        # tWave = [DT.datetime.fromtimestamp(x) for x in timeWave]
-        tWave = [datetime.fromtimestamp(x) for x in timeWave]
-        tC = np.array(tWave)
-        # reorienting wave directions to FRF's shore normal (72 degrees)
-        waveNorm = np.asarray(Dm) - int(self.shoreNormal)
-        neg = np.where((waveNorm > 180))
-        waveNorm[neg[0]] = waveNorm[neg[0]] - 360
-        offpos = np.where((waveNorm > 90))
-        offneg = np.where((waveNorm < -90))
-        waveNorm[offpos[0]] = waveNorm[offpos[0]] * 0
-        waveNorm[offneg[0]] = waveNorm[offneg[0]] * 0
+            v = {'lat': latSS, 'lon': lonSS}
+            out = closest(tempDataList, v)
+            index = np.where((xCoords==out['lon']) & (yCoords==out['lat']))
+            if len(index[0]) > 1:
+                ss = nc.variables['storm_surge'][:, index[0][0]][:].flatten()
+            else:
+                ss = nc.variables['storm_surge'][:,index[0]][:].flatten()
 
-        self.timeWave = tC
-        self.Hs = Hs
-        self.Tp = Tp
-        self.Dm = waveNorm
+            print('extrapolating with SLP PCs')
+            dailyTime = dailyTimeEval[31:]
+            dailySS = ss[31:]
+            # plt.figure()
+            # plt.plot(xCoords,yCoords,'.')
+            # plt.plot(xCoords[index[0]],yCoords[index[0]],'o')
+            # plt.figure()
+            # plt.plot(dailyTimeEval,ss)
 
+            import pandas as pd
+            df = pd.DataFrame(data=wts.PCs[:,0:200],index=wts.DATES)
+            dailySLPs = df.resample("d").mean()
+            dailyTrimmedSLPs = dailySLPs.loc[dailyTime[0]:dailyTime[-1],:]
+
+            nanSS = np.where(np.isnan(dailySS))
+            dailyVars = np.delete(dailyTrimmedSLPs.values, nanSS[0], axis=0)
+            ssVars = np.delete(dailySS, nanSS[0])
+
+            predVars = wts.PCs[:,0:200]
+            predTime = wts.DATES
+
+            from sklearn.linear_model import LinearRegression
+            allPCsToTry = np.arange(0, 199)
+            bestPC = []
+            improvingScoreSS = []
+            for qq in range(50):
+                allScoresSS = []
+                for yy in range(len(allPCsToTry)):
+                    if qq == 0:
+                        tryPCs = yy
+                        xSS = dailyVars[:, yy].reshape((-1, 1))
+                        ySS = np.array(ssVars)
+
+
+                    else:
+                        tryPCs = np.hstack([np.asarray(bestPC).flatten(), np.asarray(allPCsToTry[yy]).flatten()])
+
+                        xSS = dailyVars[:, tryPCs] #dailyTrimmedSLPs[:, tryPCs]  # .reshape((-1,1))
+                        ySS = np.array(ssVars)
+
+                    modelSS = LinearRegression().fit(xSS, ySS)
+
+                    r_sqSS = modelSS.score(xSS, ySS)
+
+                    # print(f"coefficient of determination: {r_sq}")
+                    # print(f"intercept: {model.intercept_}")
+
+                    allScoresSS.append(r_sqSS)
+
+                bestAdditionIndex = np.argmax(np.array(allScoresSS))
+                bestAddition = allPCsToTry[bestAdditionIndex]
+                bestPC.append(bestAddition)
+                removeIndex = np.where(allPCsToTry == bestAddition)
+                allPCsToTry = np.delete(allPCsToTry, removeIndex)
+                improvingScoreSS.append(np.max(np.array(allScoresSS)))
+                print('Iter {}: Adding PC#{}, cumulative score:{}'.format(qq, bestAddition,
+                                                                          np.max(np.array(allScoresSS))))
+            import matplotlib.pyplot as plt
+            # plt.figure()
+            # ax1 = plt.subplot2grid((2, 3), (0, 1))
+            # ax1.plot(ySS, modelSS.predict(xSS), '.')
+            # ax1.plot([-1.5, 2], [-1.5, 2], 'k--')
+            # ax1.plot([-1.5, 2], [0, 0], 'k--')
+            # ax1.plot([0, 0], [-1.5, 2], 'k--')
+            # ax1.set_xlabel('GTSM (m, MSL)')
+            # ax1.set_ylabel('Predicted Non-tidal Residual (m, MSL)')
+            #
+            # ax1b = plt.subplot2grid((2, 3), (1, 1))
+            ySSStd = np.std(ySS)
+            ySSMean = np.mean(ySS)
+            yModSS = modelSS.predict(xSS)
+            yModSSStd = np.std(yModSS)
+            yModSSMean = np.mean(yModSS)
+            #
+            # ax1b.plot(ySS, ((yModRed - yModRedMean) / yModRedStd) * yRedStd + yRedMean, '.')
+            # ax1b.plot([-1.5, 2], [-1.5, 2], 'k--')
+            # ax1b.plot([-1.5, 2], [0, 0], 'k--')
+            # ax1b.plot([0, 0], [-1.5, 2], 'k--')
+            # ax1b.set_xlabel('GTSM (m, MSL)')
+            # ax1b.set_ylabel('Predicted Non-tidal Residual (m, MSL)')
+            # plt.figure()
+            # ax10 = plt.subplot2grid((1, 1), (0, 0))
+            # # plt.plot(timeData,ss+mmsla+seasonal)
+            # ax10.plot(predTime,
+            #           ((modelSS.predict(predVars[:, bestPC]) - yModSSMean) / yModSSStd) * ySSStd + ySSMean)
+            # ax10.set_xlabel('time')
+            # ax10.set_ylabel('NTR Prediction')
+            resWl = ((modelSS.predict(predVars[:, bestPC]) - yModSSMean) / yModSSStd) * ySSStd + ySSMean
+
+            self.resWl = resWl
+            self.timeWL = predTime
+            import pickle
+            samplesPickle = 'surges.pickle'
+            outputSamples = {}
+            outputSamples['resWl'] = self.resWl
+            outputSamples['timeWL'] = self.timeWL
+            with open(os.path.join(self.savePath, samplesPickle), 'wb') as f:
+                pickle.dump(outputSamples, f)
+
+
+
+    def getWISLocal(self, loadPrior = False,loadPickle = './'):
+
+        if loadPrior == True:
+            import numpy as np
+            import pickle
+            with open(loadPickle, "rb") as input_file:
+                cops = pickle.load(input_file)
+
+            self.timeWave = cops['timeWave']
+            self.Hs = cops['Hs']
+            self.Tp = cops['Tp']
+            self.Dm = cops['Dm']
+            # self.timeWind = cops['timeWind']
+            self.u10 = cops['u10']
+            self.v10 = cops['v10']
+
+            print('loaded prior waves and winds')
+
+        else:
+            import numpy as np
+            import os
+            # LOADING THE WIS FILES
+            # Need to sort the files to ensure correct temporal order...
+            # waveFiles = os.listdir(self.wisPath)
+            waveFiles = [filename for filename in os.listdir(self.wisPath) if filename.startswith("WIS")]
+
+            waveFiles.sort()
+            waveFiles_path = [os.path.join(os.path.abspath(self.wisPath), x) for x in waveFiles]
+
+
+            fileDates = []
+            for hh in range(len(waveFiles)):
+                fileYear = int(waveFiles[hh].split('_')[-1].split('.')[0][0:4])
+                fileMonth = int(waveFiles[hh].split('_')[-1].split('.')[0][4:6])
+                fileDates.append(datetime(fileYear,fileMonth,1))
+
+            ind = np.where((np.asarray(fileDates) >= datetime(self.startTime[0],self.startTime[1],1)) & (np.asarray(fileDates) <= datetime(self.endTime[0],self.endTime[1],1)))
+
+            waveFiles = np.asarray(waveFiles)[ind]
+            waveFiles_path =np.asarray( waveFiles_path)[ind]
+
+            Hs = []
+            Tp = []
+            Dm = []
+            wS = []
+            wD = []
+            sp = []
+
+            timeWave = []
+            for i in waveFiles_path:
+                waves = loadWIS(i)
+                Hs = np.append(Hs, waves['waveHs'])
+                Tp = np.append(Tp, waves['waveTp'])
+                Dm = np.append(Dm, waves['waveMeanDirection'])
+                wS = np.append(wS, waves['windSpeed'])
+                wD = np.append(wD, waves['windDirection'])
+                sp = np.append(sp, waves['waveSpread'])
+                timeWave = np.append(timeWave, waves['t'].flatten())
+
+            # tWave = [DT.datetime.fromtimestamp(x) for x in timeWave]
+            tWave = [datetime.fromtimestamp(x) for x in timeWave]
+            tC = np.array(tWave)
+            # reorienting wave directions to FRF's shore normal (72 degrees)
+            waveNorm = np.asarray(Dm) - int(self.shoreNormal)
+            neg = np.where((waveNorm > 180))
+            waveNorm[neg[0]] = waveNorm[neg[0]] - 360
+            pos = np.where((waveNorm < -180))
+            waveNorm[pos[0]] = waveNorm[pos[0]] + 360
+            # offpos = np.where((waveNorm > 90))
+            # offneg = np.where((waveNorm < -90))
+            # waveNorm[offpos[0]] = waveNorm[offpos[0]] * 0
+            # waveNorm[offneg[0]] = waveNorm[offneg[0]] * 0
+
+            # reorienting wave directions to u and v in polar based on shoreline orientation
+            windNorm = np.asarray(wD) - int(self.shoreNormal) # making zero the shorenormal
+            negW = np.where((windNorm > 180))
+            windNorm[negW[0]] = windNorm[negW[0]] - 360
+            posW = np.where((windNorm < -180))
+            windNorm[posW[0]] = windNorm[posW[0]] + 360
+            windNorm = -windNorm # flipping from compass to polar
+            u10 = np.cos(windNorm*np.pi/180)*wS
+            v10 = np.sin(windNorm*np.pi/180)*wS
+
+            self.timeWave = tC
+            self.Hs = Hs
+            self.Tp = Tp
+            self.Dm = waveNorm
+            self.u10 = u10
+            self.v10 = v10
+            self.sp = sp
+
+            import pickle
+            samplesPickle = 'metOcean.pickle'
+            outputSamples = {}
+            outputSamples['timeWave'] = self.timeWave
+            outputSamples['Hs'] = self.Hs
+            outputSamples['Tp'] = self.Tp
+            outputSamples['Dm'] = self.Dm
+            # outputSamples['timeWind'] = self.timeWind
+            outputSamples['u10'] = self.u10
+            outputSamples['v10'] = self.v10
+            outputSamples['sp'] = self.sp
+
+            with open(os.path.join(self.savePath, samplesPickle), 'wb') as f:
+                pickle.dump(outputSamples, f)
 
     def getWISThredds(self,basin,buoy,**kwargs):
         from posixpath import join as urljoin
@@ -495,6 +706,8 @@ class getMetOcean():
         self.timeWind = tC
         self.u10 = u10.flatten()
         self.v10 = v10.flatten()
+
+
 
     def getERA5Winds(self,printToScreen=False):
         from datetime import datetime, date

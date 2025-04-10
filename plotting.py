@@ -524,13 +524,14 @@ def plotSeasonal(struct):
     from datetime import datetime, timedelta
     import numpy as np
     import matplotlib.pyplot as plt
-    def GenOneYearDaily(yy=1981, month_ini=1):
+    def GenOneYearDaily(yy=1981, month_ini=1,avgTime=24):
         'returns one generic year in a list of datetimes. Daily resolution'
 
         dp1 = datetime(yy, month_ini, 2)
         dp2 = dp1 + timedelta(days=364)
 
-        return [dp1 + timedelta(days=i) for i in range((dp2 - dp1).days)]
+        return [dp1 + timedelta(hours=int(avgTime)*i) for i in range(int((dp2 - dp1).days*(24/avgTime)))]
+
 
     def GenOneSeasonDaily(yy=1981, month_ini=1):
         'returns one generic year in a list of datetimes. Daily resolution'
@@ -655,6 +656,7 @@ def plotSeasonalValidation(struct,numOfSims,avgTime):
 
 
     fig = plt.figure()
+
     ax = plt.subplot2grid((1,1),(0,0))
     # plot stacked bars
     bottom_val = np.zeros(m_plot[1, :].shape)
@@ -671,8 +673,13 @@ def plotSeasonalValidation(struct,numOfSims,avgTime):
     ax.set_xlim(list_pyear[0], list_pyear[-1])
     ax.xaxis.set_major_locator(months)
     ax.xaxis.set_major_formatter(monthsFmt)
-    ax.set_ylim(0, 1)#struct.endTime[0]-struct.startTime[0])
+    # ax.set_ylim(0, 1)#struct.endTime[0]-struct.startTime[0])
     ax.set_ylabel('')
+
+
+
+
+
 
 
 def plotTotalProbabilityValidation(struct,simNum):

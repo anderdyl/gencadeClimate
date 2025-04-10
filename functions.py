@@ -64,6 +64,10 @@ def loadWIS(file):
     waveHsSwell = waves.variables['waveHsSwell'][:]
     waveMeanDirectionSwell = waves.variables['waveMeanDirectionSwell'][:]
     waveSpreadSwell = waves.variables['waveSpreadSwell'][:]
+    waveSpread = waves.variables['waveSpread'][:]
+
+    windSpeed = waves.variables['windSpeed'][:]
+    windDirection = waves.variables['windDirection'][:]
 
     output = dict()
     output['waveHs'] = waveHs
@@ -80,6 +84,10 @@ def loadWIS(file):
     output['waveTpWindsea'] = waveTmWindsea
     output['waveMeanDirectionWindsea'] = waveMeanDirectionWindsea
     output['waveSpreadWindsea'] = waveSpreadWindsea
+    output['windSpeed'] = windSpeed
+    output['windDirection'] = windDirection
+    output['waveSpread'] = waveSpread
+
     output['t'] = timeW
 
     return output
