@@ -36,15 +36,15 @@ databases:
 Two options for running the package: 1) direct access to ERA5 data via online connection, or 2) local download of CFSR. Specific requriement for each are outlined below.
 
 ### 1) ERA5
-To use ERA5 sea level pressure fields, this package requires access to the online Thredds server hosted by Copernicus.
+To use ERA5 sea level pressure fields, this package requires access to the online Thredds server hosted by Copernicus and implemented by ECMWF.
+1. Create an account with ECMWF by registering here: https://www.ecmwf.int/.
+2. Once you have an account, sign in on Copernicus here: https://cds.climate.copernicus.eu/ and complete profile activation
+3. Click on your profile name in the upper right corner and note the User ID and Personal Access Token key.
+4. The CDS API has details depending on whether you are a Linux, Windows, or Mac user: https://cds.climate.copernicus.eu/how-to-api
+5. Paste the code snippet below into your terminal, replacing 'TOKEN' with your Personal Access Token from step 3 (CDS also provides a copy and paste option on the url page in step 4):
 
-1. Create an account with Copernicus by signing up here.
-2. Once you have an account, sign in to your Copercius account here and note the UID and API key at the bottom of the page.
-3. Paste the code snippet below into your terminal, replacing 'UID' and 'API' with those from step 2:
-
-(echo 'url: https://cds.climate.copernicus.eu/api/v2';
-  echo 'key: UID:API';
-  echo 'verify: 0';
+(echo 'url: https://cds.climate.copernicus.eu/api';
+  echo 'key: TOKEN';
    ) >> ~/.cdsapirc
 
 The above command creates the file ~/.cdsapirc with your API key, which is necessary to use the CDS API. As a sanity check, use more ~/.cdsapirc to ensure everything appears correct.
