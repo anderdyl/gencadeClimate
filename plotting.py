@@ -340,6 +340,71 @@ def plotSlpExample(struct, plotTime=0):
 
 
 
+
+def plotSlpExampleLocal(struct, plotTime=0, centralNode=(0,0)):
+    import matplotlib.pyplot as plt
+    import matplotlib.cm as cm
+    from mpl_toolkits.basemap import Basemap
+    import numpy as np
+
+    fig = plt.figure(figsize=(10, 6))
+
+    ax = plt.subplot2grid((1, 1), (0, 0), rowspan=1, colspan=1)
+    clevels = np.arange(940, 1080, 1)
+
+    spatialField = struct.SLPSLocal[:, plotTime] / 100  # SLPS[:, i] / 100  # - np.nanmean(SLP, axis=1) / 100
+
+    if struct.basin == 'atlantic':
+        X_in = struct.xFlatLocal#[~struct.isOnLandFlatLocal]
+        X_in_Checker = np.where(X_in < 180)
+        X_in[X_in_Checker] = X_in[X_in_Checker] + 360
+
+    else:
+        X_in = struct.xFlatLocal#[~struct.isOnLandFlatLocal]
+    Y_in = struct.yFlatLocal#[~struct.isOnLandFlatLocal]
+    sea_nodes = []
+    for qq in range(len(X_in)):
+        sea_nodes.append(np.where((struct.xGridLocal == X_in[qq]) & (struct.yGridLocal == Y_in[qq])))
+
+    rectField = np.ones((np.shape(struct.xGridLocal))) * np.nan
+    for tt in range(len(sea_nodes)):
+        rectField[sea_nodes[tt]] = spatialField[tt]
+
+    if struct.basin == 'atlantic':
+        m = Basemap(projection='merc', llcrnrlat=centralNode[0]-4, urcrnrlat=centralNode[0]+4, llcrnrlon=centralNode[1]-4,
+                    urcrnrlon=centralNode[1]+4, lat_ts=10,
+                    resolution='l')
+    else:
+        m = Basemap(projection='merc', llcrnrlat=struct.latBot, urcrnrlat=struct.latTop, llcrnrlon=struct.lonLeft,
+                    urcrnrlon=struct.lonRight, lat_ts=10,
+                    resolution='l')
+    if struct.basin == 'atlantic':
+        xGridCheck = struct.xGridLocal
+        indexChecker = np.where(xGridCheck < 180)
+        xGridCheck[indexChecker] = xGridCheck[indexChecker] + 360
+        cx, cy = m(xGridCheck, struct.yGridLocal)
+    else:
+        cx, cy = m(struct.xGridLocal, struct.yGridLocal)
+    m.fillcontinents(color=[0.5, 0.5, 0.5])
+
+    m.drawcoastlines()
+    # m.bluemarble()
+    # CS = m.contourf(cx, cy, rectField.T, clevels, vmin=-20, vmax=20, cmap=cm.RdBu_r, shading='gouraud')
+    CS = m.contourf(cx.T, cy.T, rectField.T, clevels, vmin=975, vmax=1045, cmap=cm.RdBu_r)  # , shading='gouraud')
+
+    tx, ty = m(320, -0)
+    parallels = np.arange(0, 360, 10)
+    m.drawparallels(parallels, labels=[True, True, True, False], textcolor='black')
+    # ax.text(tx, ty, '{}'.format((group_size[num])))
+    meridians = np.arange(0, 360, 20)
+    m.drawmeridians(meridians, labels=[True, True, True, True], textcolor='black')
+
+    fig.subplots_adjust(right=0.8)
+    cbar_ax = fig.add_axes([0.88, 0.1, 0.02, 0.8])
+    cbar = fig.colorbar(CS, cax=cbar_ax)
+    cbar.set_label('SLP (mbar)')
+
+
 def plotEOFs(struct):
     import numpy as np
     import matplotlib.pyplot as plt

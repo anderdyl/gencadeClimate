@@ -18,18 +18,18 @@ class weatherTypes():
         self.latBot = kwargs.get('latBot', 15)
         self.latTop = kwargs.get('latTop', 55)
         self.resolution = kwargs.get('resolution',1)
+        self.resolutionLocal = kwargs.get('resolutionLocal',0.5)
+
         self.avgTime = kwargs.get('avgTime',24)
         self.startTime = kwargs.get('startTime',[1979,1,1])
         self.endTime = kwargs.get('endTime',[2024,5,31])
         self.slpMemory = kwargs.get('slpMemory',False)
+        self.localMemory = kwargs.get('localMemory',False)
         self.slpPath = kwargs.get('slpPath')
         self.minGroupSize = kwargs.get('minGroupSize',50)
         self.savePath = kwargs.get('savePath',os.getcwd())
         self.basin = kwargs.get('basin','atlantic')
-        # self.lonLeft = kwargs.get('cameraID', 'c1')
-        # self.lonRight = kwargs.get('rawPath')
-        # self.latBottom = kwargs.get('nFrames', 1)
-        # self.latTop = kwargs.get('startFrame', 0)
+
 
     def extractERA5(self,printToScreen=False):
         year = self.startTime[0]
@@ -266,6 +266,13 @@ class weatherTypes():
             lat = data.variables['lat'][:]
             lon = data.variables['lon'][:]
 
+
+            def ceilPartial(value, resolution):
+                return np.ceil(value / resolution) * resolution
+
+            def floorPartial(value, resolution):
+                return np.floor(value / resolution) * resolution
+
             pos_lon1 = np.where((lon == self.lonLeft - 2))
             pos_lon2 = np.where((lon == self.lonRight + 2))
             pos_lat2 = np.where((lat == self.latTop + 2))
@@ -281,8 +288,6 @@ class weatherTypes():
             def roundPartial(value, resolution):
                 return round(value / resolution) * resolution
 
-            def ceilPartial(value, resolution):
-                return np.ceil(value / resolution) * resolution
 
             counter = 0
             # Now need to loop through the number of files we're extracting data from
@@ -303,30 +308,53 @@ class weatherTypes():
                         # file = '/users/dylananderson/documents/data/prmsl/prmsl.gdas.{}{:02d}.grb2.nc'.format(yearExtract,
                         #                                                                                       monthExtract)
                     data = Dataset(file)
-                    time = data.variables['valid_date_time']
-                    if printToScreen == True:
 
+                    if printToScreen == True:
                         print('{}-{}'.format(yearExtract, monthExtract))
 
-                    # extract times and turn them into datetimes
-                    # years = np.empty((len(time),))
-                    year = [int(''.join(list(map(lambda x: x.decode('utf-8'), i))).strip()[0:4]) for i in time]
-                    month = [int(''.join(list(map(lambda x: x.decode('utf-8'), i))).strip()[4:6]) for i in time]
-                    day = [int(''.join(list(map(lambda x: x.decode('utf-8'), i))).strip()[6:8]) for i in time]
-                    hour = [int(''.join(list(map(lambda x: x.decode('utf-8'), i))).strip()[8:]) for i in time]
-                    d_vec = np.vstack((year, month, day, hour)).T
-                    dates = [datetime(d[0], d[1], d[2], d[3], 0, 0) for d in d_vec]
 
-                    # Extracting SLP fields, need to account for wrap around international date line
-                    if self.lonLeft > self.lonRight:
-                        # longitud = np.hstack((lon[pos_lon1[0][0]:], lon[0:(pos_lon2[0][0] + 1)]))
-                        slp1 = data.variables['PRMSL_L101'][:, (pos_lat2[0][0]):(pos_lat1[0][0] + 1), (pos_lon1[0][0]):]
-                        slp2 = data.variables['PRMSL_L101'][:, (pos_lat2[0][0]):(pos_lat1[0][0] + 1),
-                               0:(pos_lon2[0][0] + 1)]
-                        slp = np.concatenate((slp1, slp2), axis=2)
+                    if (yearExtract == 2025 and monthExtract >= 2) or yearExtract > 2025:
+                        time = data.variables['time']
+                        from datetime import timedelta
+                        from calendar import monthrange
+                        import zoneinfo  # Python ≥3.9; otherwise use `pytz`
+                        #def hourly_vector_stdlib(year: int, month: int, tz: str | None = None):
+                        hours_in_month = monthrange(yearExtract, monthExtract)[1] * 24
+                        #tzinfo = zoneinfo.ZoneInfo(tz) if tz else None
+                        start = datetime(yearExtract, monthExtract, 1, 0)#, tzinfo=tzinfo)
+                        dates = [start + timedelta(hours=h) for h in range(hours_in_month)]
+
+                        # Extracting SLP fields, need to account for wrap around international date line
+                        if self.lonLeft > self.lonRight:
+                            # longitud = np.hstack((lon[pos_lon1[0][0]:], lon[0:(pos_lon2[0][0] + 1)]))
+                            slp1 = data.variables['Pressure_reduced_to_MSL_msl'][:, (pos_lat2[0][0]):(pos_lat1[0][0] + 1), (pos_lon1[0][0]):]
+                            slp2 = data.variables['Pressure_reduced_to_MSL_msl'][:, (pos_lat2[0][0]):(pos_lat1[0][0] + 1),
+                                   0:(pos_lon2[0][0] + 1)]
+                            slp = np.concatenate((slp1, slp2), axis=2)
+                        else:
+                            slp = data.variables['Pressure_reduced_to_MSL_msl'][:, (pos_lat2[0][0]):(pos_lat1[0][0] + 1),
+                                  (pos_lon1[0][0]):(pos_lon2[0][0] + 1)]
                     else:
-                        slp = data.variables['PRMSL_L101'][:, (pos_lat2[0][0]):(pos_lat1[0][0] + 1),
-                              (pos_lon1[0][0]):(pos_lon2[0][0] + 1)]
+                        time = data.variables['valid_date_time']
+                        # extract times and turn them into datetimes
+                        # years = np.empty((len(time),))
+                        year = [int(''.join(list(map(lambda x: x.decode('utf-8'), i))).strip()[0:4]) for i in time]
+                        month = [int(''.join(list(map(lambda x: x.decode('utf-8'), i))).strip()[4:6]) for i in time]
+                        day = [int(''.join(list(map(lambda x: x.decode('utf-8'), i))).strip()[6:8]) for i in time]
+                        hour = [int(''.join(list(map(lambda x: x.decode('utf-8'), i))).strip()[8:]) for i in time]
+                        d_vec = np.vstack((year, month, day, hour)).T
+                        dates = [datetime(d[0], d[1], d[2], d[3], 0, 0) for d in d_vec]
+
+                        # Extracting SLP fields, need to account for wrap around international date line
+                        if self.lonLeft > self.lonRight:
+                            # longitud = np.hstack((lon[pos_lon1[0][0]:], lon[0:(pos_lon2[0][0] + 1)]))
+                            slp1 = data.variables['PRMSL_L101'][:, (pos_lat2[0][0]):(pos_lat1[0][0] + 1), (pos_lon1[0][0]):]
+                            slp2 = data.variables['PRMSL_L101'][:, (pos_lat2[0][0]):(pos_lat1[0][0] + 1),
+                                   0:(pos_lon2[0][0] + 1)]
+                            slp = np.concatenate((slp1, slp2), axis=2)
+                        else:
+                            slp = data.variables['PRMSL_L101'][:, (pos_lat2[0][0]):(pos_lat1[0][0] + 1),
+                                  (pos_lon1[0][0]):(pos_lon2[0][0] + 1)]
 
                     # are we averaging to a shorter time window?
                     m, n, p = np.shape(slp)
@@ -474,28 +502,55 @@ class weatherTypes():
                             #                                                                                       monthExtract)
 
                         data = Dataset(file)
-                        time = data.variables['valid_date_time']
                         print('{}-{}'.format(yearExtract, monthExtract))
 
-                        # extract times and turn them into datetimes
-                        # years = np.empty((len(time),))
-                        year = [int(''.join(list(map(lambda x: x.decode('utf-8'), i))).strip()[0:4]) for i in time]
-                        month = [int(''.join(list(map(lambda x: x.decode('utf-8'), i))).strip()[4:6]) for i in time]
-                        day = [int(''.join(list(map(lambda x: x.decode('utf-8'), i))).strip()[6:8]) for i in time]
-                        hour = [int(''.join(list(map(lambda x: x.decode('utf-8'), i))).strip()[8:]) for i in time]
-                        d_vec = np.vstack((year, month, day, hour)).T
-                        dates = [datetime(d[0], d[1], d[2], d[3], 0, 0) for d in d_vec]
+                        if (yearExtract == 2025 and monthExtract >= 1) or yearExtract > 2025:
+                            time = data.variables['time']
+                            from datetime import timedelta
+                            from calendar import monthrange
+                            import zoneinfo  # Python ≥3.9; otherwise use `pytz`
+                            # def hourly_vector_stdlib(year: int, month: int, tz: str | None = None):
+                            hours_in_month = monthrange(yearExtract, monthExtract)[1] * 24
+                            # tzinfo = zoneinfo.ZoneInfo(tz) if tz else None
+                            start = datetime(yearExtract, monthExtract, 1, 0)  # , tzinfo=tzinfo)
+                            dates = [start + timedelta(hours=h) for h in range(hours_in_month)]
 
-                        # Extracting SLP fields, need to account for wrap around international date line
-                        if self.lonLeft > self.lonRight:
-                            # longitud = np.hstack((lon[pos_lon1[0][0]:], lon[0:(pos_lon2[0][0] + 1)]))
-                            slp1 = data.variables['PRMSL_L101'][:, (pos_lat2[0][0]):(pos_lat1[0][0] + 1), (pos_lon1[0][0]):]
-                            slp2 = data.variables['PRMSL_L101'][:, (pos_lat2[0][0]):(pos_lat1[0][0] + 1),
-                                   0:(pos_lon2[0][0] + 1)]
-                            slp = np.concatenate((slp1, slp2), axis=2)
+                            # Extracting SLP fields, need to account for wrap around international date line
+                            if self.lonLeft > self.lonRight:
+                                # longitud = np.hstack((lon[pos_lon1[0][0]:], lon[0:(pos_lon2[0][0] + 1)]))
+                                slp1 = data.variables['Pressure_reduced_to_MSL_msl'][:,
+                                       (pos_lat2[0][0]):(pos_lat1[0][0] + 1), (pos_lon1[0][0]):]
+                                slp2 = data.variables['Pressure_reduced_to_MSL_msl'][:,
+                                       (pos_lat2[0][0]):(pos_lat1[0][0] + 1),
+                                       0:(pos_lon2[0][0] + 1)]
+                                slp = np.concatenate((slp1, slp2), axis=2)
+                            else:
+                                slp = data.variables['Pressure_reduced_to_MSL_msl'][:,
+                                      (pos_lat2[0][0]):(pos_lat1[0][0] + 1),
+                                      (pos_lon1[0][0]):(pos_lon2[0][0] + 1)]
+
                         else:
-                            slp = data.variables['PRMSL_L101'][:, (pos_lat2[0][0]):(pos_lat1[0][0] + 1),
-                                  (pos_lon1[0][0]):(pos_lon2[0][0] + 1)]
+                            time = data.variables['valid_date_time']
+
+                            # extract times and turn them into datetimes
+                            # years = np.empty((len(time),))
+                            year = [int(''.join(list(map(lambda x: x.decode('utf-8'), i))).strip()[0:4]) for i in time]
+                            month = [int(''.join(list(map(lambda x: x.decode('utf-8'), i))).strip()[4:6]) for i in time]
+                            day = [int(''.join(list(map(lambda x: x.decode('utf-8'), i))).strip()[6:8]) for i in time]
+                            hour = [int(''.join(list(map(lambda x: x.decode('utf-8'), i))).strip()[8:]) for i in time]
+                            d_vec = np.vstack((year, month, day, hour)).T
+                            dates = [datetime(d[0], d[1], d[2], d[3], 0, 0) for d in d_vec]
+
+                            # Extracting SLP fields, need to account for wrap around international date line
+                            if self.lonLeft > self.lonRight:
+                                # longitud = np.hstack((lon[pos_lon1[0][0]:], lon[0:(pos_lon2[0][0] + 1)]))
+                                slp1 = data.variables['PRMSL_L101'][:, (pos_lat2[0][0]):(pos_lat1[0][0] + 1), (pos_lon1[0][0]):]
+                                slp2 = data.variables['PRMSL_L101'][:, (pos_lat2[0][0]):(pos_lat1[0][0] + 1),
+                                       0:(pos_lon2[0][0] + 1)]
+                                slp = np.concatenate((slp1, slp2), axis=2)
+                            else:
+                                slp = data.variables['PRMSL_L101'][:, (pos_lat2[0][0]):(pos_lat1[0][0] + 1),
+                                      (pos_lon1[0][0]):(pos_lon2[0][0] + 1)]
                         if mm == 0:
                             slpCombined = slp
                             datesCombined = dates
@@ -713,6 +768,577 @@ class weatherTypes():
             with open(os.path.join(self.savePath,samplesPickle), 'wb') as f:
                 pickle.dump(outputSamples, f)
 
+
+    def extractCFSRLocal(self,centralNode,printToScreen=False,estelaMat=None,loadPrior=False,loadPickle='./'):
+        '''
+        This function is utilized for opening *.raw Argus files prior to a debayering task,
+        and adds the
+
+        Must call this function before calling any debayering functions
+        '''
+
+        if loadPrior==True:
+            import pickle
+            with open(loadPickle, "rb") as input_file:
+                slps = pickle.load(input_file)
+            self.DATESLocal = slps['DATESLocal']
+            self.xGridLocal = slps['x2Local']
+            self.yGridLocal = slps['y2Local']
+            self.xFlatLocal = slps['xFlatLocal']
+            self.yFlatLocal = slps['yFlatLocal']
+            self.isOnLandGridLocal = slps['isOnLandGridLocal']
+            self.isOnLandFlatLocal = slps['isOnLandFlatLocal']
+            self.SLPSLocal = slps['SLPSLocal']
+            self.GRDSLocal = slps['GRDSLocal']
+            self.MxLocal = slps['MxLocal']
+            self.MyLocal = slps['MyLocal']
+            print('loaded prior SLP Local predictor')
+
+        else:
+
+
+            year = self.startTime[0]
+            month = self.startTime[1]
+            year2 = self.endTime[0]
+            month2 = self.endTime[1]
+            print('Starting extract at {}-{}'.format(year, month))
+
+            # estelaMat = '/media/dylananderson/Elements1/ESTELA/out/NagsHead2/NagsHead2_obj.mat'
+
+            filePaths = np.sort(os.listdir(self.slpPath))
+
+            initFile = self.slpPath + 'prmsl.cdas1.201104.grb2.nc'
+
+            dt = datetime(year, month, 1)
+            if month2 == 12:
+                end = datetime(year2 + 1, 1, 1)
+            else:
+                end = datetime(year2, month2 + 1, 1)
+            # step = datetime.timedelta(months=1)
+            step = relativedelta(months=1)
+            extractTime = []
+            while dt < end:
+                extractTime.append(dt)
+                dt += step
+
+            data = Dataset(initFile)
+            lat = data.variables['lat'][:]
+            lon = data.variables['lon'][:]
+
+            def ceilPartial(value, resolution):
+                return np.ceil(value / resolution) * resolution
+
+            def floorPartial(value, resolution):
+                return np.floor(value / resolution) * resolution
+
+            # if centralNode[1] < 0:
+            #     centralNode[1]=centralNode[1]+360
+
+            print(centralNode[0], centralNode[1])
+            print(floorPartial(centralNode[1],1), ceilPartial(centralNode[1],1), ceilPartial(centralNode[0],1), floorPartial(centralNode[0],1))
+
+            lon_left = floorPartial(centralNode[1],1) - 2
+            lon_right = ceilPartial(centralNode[1],1) + 2
+
+            pos_lon1 = np.where((lon == floorPartial(centralNode[1],1) - 2))
+            pos_lon2 = np.where((lon == ceilPartial(centralNode[1],1) + 2))
+
+            pos_lat2 = np.where((lat == ceilPartial(centralNode[0],1) + 2))
+            pos_lat1 = np.where((lat == floorPartial(centralNode[0],1) - 2))
+            print(pos_lon1, pos_lon2, pos_lat1, pos_lat2)
+
+            latitud = lat[(pos_lat2[0][0]):(pos_lat1[0][0] + 1)]
+            if lon_left > lon_right:
+                longitud = np.hstack((lon[pos_lon1[0][0]:], lon[0:(pos_lon2[0][0] + 1)]))
+            else:
+                longitud = lon[pos_lon1[0][0]:(pos_lon2[0][0] + 1)]
+            [x, y] = np.meshgrid(longitud, latitud)
+
+            def roundPartial(value, resolution):
+                return round(value / resolution) * resolution
+
+
+            counter = 0
+            # Now need to loop through the number of files we're extracting data from
+            for tt in extractTime:
+
+                if self.localMemory == False:
+                    yearExtract = tt.year
+                    monthExtract = tt.month
+
+                    if (yearExtract == 2011 and monthExtract >= 4) or yearExtract > 2011:
+                        file = self.slpPath + 'prmsl.cdas1.{}{:02d}.grb2.nc'.format(yearExtract,
+                                                                               monthExtract)
+                        # file = '/users/dylananderson/documents/data/prmsl/prmsl.cdas1.{}{:02d}.grb2.nc'.format(yearExtract,
+                        #                                                                                        monthExtract)
+                    else:
+                        file = self.slpPath + 'prmsl.gdas.{}{:02d}.grb2.nc'.format(yearExtract,
+                                                                              monthExtract)
+                        # file = '/users/dylananderson/documents/data/prmsl/prmsl.gdas.{}{:02d}.grb2.nc'.format(yearExtract,
+                        #                                                                                       monthExtract)
+                    data = Dataset(file)
+
+                    if printToScreen == True:
+                        print('{}-{}'.format(yearExtract, monthExtract))
+
+
+                    if (yearExtract == 2025 and monthExtract >= 1) or yearExtract > 2025:
+                        time = data.variables['time']
+                        from datetime import timedelta
+                        from calendar import monthrange
+                        import zoneinfo  # Python ≥3.9; otherwise use `pytz`
+                        #def hourly_vector_stdlib(year: int, month: int, tz: str | None = None):
+                        hours_in_month = monthrange(yearExtract, monthExtract)[1] * 24
+                        #tzinfo = zoneinfo.ZoneInfo(tz) if tz else None
+                        start = datetime(yearExtract, monthExtract, 1, 0)#, tzinfo=tzinfo)
+                        dates = [start + timedelta(hours=h) for h in range(hours_in_month)]
+
+                        # Extracting SLP fields, need to account for wrap around international date line
+                        if lon_left > lon_right:
+                            # longitud = np.hstack((lon[pos_lon1[0][0]:], lon[0:(pos_lon2[0][0] + 1)]))
+                            slp1 = data.variables['Pressure_reduced_to_MSL_msl'][:, (pos_lat2[0][0]):(pos_lat1[0][0] + 1), (pos_lon1[0][0]):]
+                            slp2 = data.variables['Pressure_reduced_to_MSL_msl'][:, (pos_lat2[0][0]):(pos_lat1[0][0] + 1),
+                                   0:(pos_lon2[0][0] + 1)]
+                            slp = np.concatenate((slp1, slp2), axis=2)
+                        else:
+                            slp = data.variables['Pressure_reduced_to_MSL_msl'][:, (pos_lat2[0][0]):(pos_lat1[0][0] + 1),
+                                  (pos_lon1[0][0]):(pos_lon2[0][0] + 1)]
+                    else:
+                        time = data.variables['valid_date_time']
+                        # extract times and turn them into datetimes
+                        # years = np.empty((len(time),))
+                        year = [int(''.join(list(map(lambda x: x.decode('utf-8'), i))).strip()[0:4]) for i in time]
+                        month = [int(''.join(list(map(lambda x: x.decode('utf-8'), i))).strip()[4:6]) for i in time]
+                        day = [int(''.join(list(map(lambda x: x.decode('utf-8'), i))).strip()[6:8]) for i in time]
+                        hour = [int(''.join(list(map(lambda x: x.decode('utf-8'), i))).strip()[8:]) for i in time]
+                        d_vec = np.vstack((year, month, day, hour)).T
+                        dates = [datetime(d[0], d[1], d[2], d[3], 0, 0) for d in d_vec]
+
+                        # Extracting SLP fields, need to account for wrap around international date line
+                        if lon_left > lon_right:
+                            # longitud = np.hstack((lon[pos_lon1[0][0]:], lon[0:(pos_lon2[0][0] + 1)]))
+                            slp1 = data.variables['PRMSL_L101'][:, (pos_lat2[0][0]):(pos_lat1[0][0] + 1), (pos_lon1[0][0]):]
+                            slp2 = data.variables['PRMSL_L101'][:, (pos_lat2[0][0]):(pos_lat1[0][0] + 1),
+                                   0:(pos_lon2[0][0] + 1)]
+                            slp = np.concatenate((slp1, slp2), axis=2)
+                        else:
+                            slp = data.variables['PRMSL_L101'][:, (pos_lat2[0][0]):(pos_lat1[0][0] + 1),
+                                  (pos_lon1[0][0]):(pos_lon2[0][0] + 1)]
+
+                    # are we averaging to a shorter time window?
+                    m, n, p = np.shape(slp)
+                    slp_ = np.zeros((n * p, m))
+                    grd_ = np.zeros((n * p, m))
+                    for mmm in range(m):
+                        slp_[:, mmm] = slp[mmm, :, :].flatten()
+                        vgrad = np.gradient(slp[mmm, :, :])
+                        grd_[:, mmm] = np.sqrt(vgrad[0] ** 2 + vgrad[1] ** 2).flatten()
+                    # slp_ = slp.reshape(n*m,p)
+
+                    if self.avgTime == 0:
+                        if printToScreen == True:
+                            print('returning hourly values')
+                        elif counter == 0:
+                            print('returning hourly values')
+
+                        slpAvg = slp_
+                        grdAvg = grd_
+                        datesAvg = dates
+                    else:
+                        numWindows = int(len(time) / self.avgTime)
+                        if printToScreen == True:
+                            print('averaging every {} hours to {} timesteps'.format(self.avgTime, numWindows))
+                        elif counter == 0:
+                            print('averaging every {} hours to {} timesteps'.format(self.avgTime, numWindows))
+
+                        c = 0
+                        datesAvg = list()
+                        slpAvg = np.empty((n * p, numWindows))
+                        grdAvg = np.empty((n * p, numWindows))
+
+                        for t in range(numWindows):
+                            slpAvg[:, t] = np.nanmean(slp_[:, c:c + self.avgTime], axis=1)
+                            grdAvg[:, t] = np.nanmean(grd_[:, c:c + self.avgTime], axis=1)
+                            datesAvg.append(dates[c])
+                            c = c + self.avgTime
+
+                    # are we reducing the resolution of the grid?
+                    if self.resolutionLocal == 0.5:
+                        if printToScreen == True:
+                            print('keeping full 0.5 degree resolution')
+                        elif counter == 0:
+                            print('keeping full 0.5 degree resolution')
+
+                        slpDownscaled = slpAvg
+                        grdDownscaled = grdAvg
+                        xDownscaled = x.flatten()
+                        yDownscaled = y.flatten()
+                        x2 = x
+                        y2 = y
+                    else:
+                        xFlat = x.flatten()
+                        yFlat = y.flatten()
+
+
+                        if self.basin == 'atlantic':
+                            inder = np.where(xFlat < 180)
+                            xFlat[inder] = xFlat[inder] + 360
+
+
+                        xRem = np.fmod(xFlat, self.resolutionLocal)
+                        yRem = np.fmod(yFlat, self.resolutionLocal)
+                        cc = 0
+                        for pp in range(len(xFlat)):
+                            if xRem[pp] == 0:
+                                if yRem[pp] == 0:
+                                    if cc == 0:
+                                        ind2deg = int(pp)
+                                        cc = cc + 1
+                                    else:
+                                        ind2deg = np.hstack((ind2deg, int(pp)))
+                                        cc = cc + 1
+                        slpDownscaled = slpAvg[ind2deg, :]
+                        grdDownscaled = grdAvg[ind2deg, :]
+                        xDownscaled = xFlat[ind2deg]
+                        yDownscaled = yFlat[ind2deg]
+                        if printToScreen == True:
+                            print('Downscaling to {} degree resolution'.format(self.resolution))
+                            print('{} points rather than {} (full)'.format(len(xDownscaled), len(xFlat)))
+                        elif counter == 0:
+                            print('Downscaling to {} degree resolution'.format(self.resolution))
+                            print('{} points rather than {} (full)'.format(len(xDownscaled), len(xFlat)))
+                        reshapeIndX = np.where((np.diff(xDownscaled) > 4) | (np.diff(xDownscaled) < -4))
+                        reshapeIndY = np.where((np.diff(yDownscaled) < 0))
+                        x2 = xDownscaled.reshape(int(len(reshapeIndY[0]) + 1), int(reshapeIndX[0][0] + 1)).filled()
+                        y2 = yDownscaled.reshape(int(len(reshapeIndY[0]) + 1), int(reshapeIndX[0][0] + 1)).filled()
+
+                    My, Mx = np.shape(y2)
+                    slpMem = slpDownscaled
+                    grdMem = grdDownscaled
+                    datesMem = datesAvg
+
+                    # print('Extracted until {}-{}'.format(year2, month2))
+
+                    # FOR THE LOCAL WE WANT TO KEEP LAND VALUES?
+                    from global_land_mask import globe
+                    wrapLons = np.where((x2 > 180))
+                    x2[wrapLons] = x2[wrapLons] - 360
+                    xFlat = x2.flatten()
+                    yFlat = y2.flatten()
+
+                    isOnLandGrid = globe.is_land(y2, x2)
+                    isOnLandFlat = globe.is_land(yFlat, xFlat)
+
+                    x2[wrapLons] = x2[wrapLons] + 360
+                    xFlat = x2.flatten()
+
+                    trimSlps = slpMem#[~isOnLandFlat, :]
+                    trimGrds = grdMem#[~isOnLandFlat, :]
+
+                    if counter == 0:
+                        SLPS = trimSlps
+                        GRDS = trimGrds
+                        DATES = datesMem
+                    else:
+                        SLPS = np.hstack((SLPS, trimSlps))
+                        GRDS = np.hstack((GRDS, trimGrds))
+                        DATES = np.append(DATES, datesMem)
+
+                    counter = counter + 1
+
+                else:
+
+                    for mm in range(2):
+                        if mm == 0:
+                            monthExtract = tt.month - 1
+                            if monthExtract == 0:
+                                monthExtract = 12
+                                yearExtract = tt.year - 1
+                            else:
+                                yearExtract = tt.year
+                        else:
+                            yearExtract = tt.year
+                            monthExtract = tt.month
+
+                        if (yearExtract == 2011 and monthExtract >= 4) or yearExtract > 2011:
+                            file = self.slpPath + 'prmsl.cdas1.{}{:02d}.grb2.nc'.format(yearExtract,
+                                                                                        monthExtract)
+                            # file = '/users/dylananderson/documents/data/prmsl/prmsl.cdas1.{}{:02d}.grb2.nc'.format(yearExtract,
+                            #                                                                                        monthExtract)
+                        else:
+                            file = self.slpPath + 'prmsl.gdas.{}{:02d}.grb2.nc'.format(yearExtract,
+                                                                                       monthExtract)
+                            # file = '/users/dylananderson/documents/data/prmsl/prmsl.gdas.{}{:02d}.grb2.nc'.format(yearExtract,
+                            #                                                                                       monthExtract)
+
+                        data = Dataset(file)
+                        print('{}-{}'.format(yearExtract, monthExtract))
+
+                        if (yearExtract == 2025 and monthExtract >= 1) or yearExtract > 2025:
+                            time = data.variables['time']
+                            from datetime import timedelta
+                            from calendar import monthrange
+                            import zoneinfo  # Python ≥3.9; otherwise use `pytz`
+                            # def hourly_vector_stdlib(year: int, month: int, tz: str | None = None):
+                            hours_in_month = monthrange(yearExtract, monthExtract)[1] * 24
+                            # tzinfo = zoneinfo.ZoneInfo(tz) if tz else None
+                            start = datetime(yearExtract, monthExtract, 1, 0)  # , tzinfo=tzinfo)
+                            dates = [start + timedelta(hours=h) for h in range(hours_in_month)]
+
+                            # Extracting SLP fields, need to account for wrap around international date line
+                            if self.lonLeft > self.lonRight:
+                                # longitud = np.hstack((lon[pos_lon1[0][0]:], lon[0:(pos_lon2[0][0] + 1)]))
+                                slp1 = data.variables['Pressure_reduced_to_MSL_msl'][:,
+                                       (pos_lat2[0][0]):(pos_lat1[0][0] + 1), (pos_lon1[0][0]):]
+                                slp2 = data.variables['Pressure_reduced_to_MSL_msl'][:,
+                                       (pos_lat2[0][0]):(pos_lat1[0][0] + 1),
+                                       0:(pos_lon2[0][0] + 1)]
+                                slp = np.concatenate((slp1, slp2), axis=2)
+                            else:
+                                slp = data.variables['Pressure_reduced_to_MSL_msl'][:,
+                                      (pos_lat2[0][0]):(pos_lat1[0][0] + 1),
+                                      (pos_lon1[0][0]):(pos_lon2[0][0] + 1)]
+
+                        else:
+                            time = data.variables['valid_date_time']
+
+                            # extract times and turn them into datetimes
+                            # years = np.empty((len(time),))
+                            year = [int(''.join(list(map(lambda x: x.decode('utf-8'), i))).strip()[0:4]) for i in time]
+                            month = [int(''.join(list(map(lambda x: x.decode('utf-8'), i))).strip()[4:6]) for i in time]
+                            day = [int(''.join(list(map(lambda x: x.decode('utf-8'), i))).strip()[6:8]) for i in time]
+                            hour = [int(''.join(list(map(lambda x: x.decode('utf-8'), i))).strip()[8:]) for i in time]
+                            d_vec = np.vstack((year, month, day, hour)).T
+                            dates = [datetime(d[0], d[1], d[2], d[3], 0, 0) for d in d_vec]
+
+                            # Extracting SLP fields, need to account for wrap around international date line
+                            if self.lonLeft > self.lonRight:
+                                # longitud = np.hstack((lon[pos_lon1[0][0]:], lon[0:(pos_lon2[0][0] + 1)]))
+                                slp1 = data.variables['PRMSL_L101'][:, (pos_lat2[0][0]):(pos_lat1[0][0] + 1), (pos_lon1[0][0]):]
+                                slp2 = data.variables['PRMSL_L101'][:, (pos_lat2[0][0]):(pos_lat1[0][0] + 1),
+                                       0:(pos_lon2[0][0] + 1)]
+                                slp = np.concatenate((slp1, slp2), axis=2)
+                            else:
+                                slp = data.variables['PRMSL_L101'][:, (pos_lat2[0][0]):(pos_lat1[0][0] + 1),
+                                      (pos_lon1[0][0]):(pos_lon2[0][0] + 1)]
+                        if mm == 0:
+                            slpCombined = slp
+                            datesCombined = dates
+                        else:
+                            slpCombined = np.concatenate((slpCombined, slp))
+                            datesCombined = np.concatenate((datesCombined, dates))
+
+
+                    # are we averaging to a shorter time window?
+                    m, n, p = np.shape(slpCombined)
+                    slp_ = np.zeros((n * p, m))
+                    grd_ = np.zeros((n * p, m))
+                    for mmm in range(m):
+                        slp_[:, mmm] = slpCombined[mmm, :, :].flatten()
+                        vgrad = np.gradient(slpCombined[mmm, :, :])
+                        grd_[:, mmm] = np.sqrt(vgrad[0] ** 2 + vgrad[1] ** 2).flatten()
+                    # slp_ = slp.reshape(n*m,p)
+
+                    if self.avgTime == 0:
+                        if printToScreen == True:
+                            print('returning hourly values')
+                        slpAvg = slp_
+                        grdAvg = grd_
+                        datesAvg = datesCombined
+                    else:
+                        numWindows = int(len(datesCombined) / self.avgTime)
+                        if printToScreen == True:
+                            print('averaging every {} hours to {} timesteps'.format(self.avgTime, numWindows))
+                        c = 0
+                        datesAvg = list()
+                        slpAvg = np.empty((n * p, numWindows))
+                        grdAvg = np.empty((n * p, numWindows))
+                        for t in range(numWindows):
+                            slpAvg[:, t] = np.nanmean(slp_[:, c:c + self.avgTime], axis=1)
+                            grdAvg[:, t] = np.nanmean(grd_[:, c:c + self.avgTime], axis=1)
+                            datesAvg.append(datesCombined[c])
+                            c = c + self.avgTime
+
+                    # are we reducing the resolution of the grid?
+                    if self.resolutionLocal == 0.5:
+                        if printToScreen == True:
+                            print('keeping full 0.5 degree resolution')
+                        slpDownscaled = slpAvg
+                        grdDownscaled = grdAvg
+                        xDownscaled = x.flatten()
+                        yDownscaled = y.flatten()
+                        x2 = x
+                        y2 = y
+                    else:
+                        xFlat = x.flatten()
+                        yFlat = y.flatten()
+                        if self.basin == 'atlantic':
+                            inder = np.where(xFlat < 180)
+                            xFlat[inder] = xFlat[inder] + 360
+                        xRem = np.fmod(xFlat, self.resolutionLocal)
+                        yRem = np.fmod(yFlat, self.resolutionLocal)
+                        cc = 0
+                        for pp in range(len(xFlat)):
+                            if xRem[pp] == 0:
+                                if yRem[pp] == 0:
+                                    if cc == 0:
+                                        ind2deg = int(pp)
+                                        cc = cc + 1
+                                    else:
+                                        ind2deg = np.hstack((ind2deg, int(pp)))
+                                        cc = cc + 1
+                        slpDownscaled = slpAvg[ind2deg, :]
+                        grdDownscaled = grdAvg[ind2deg, :]
+                        xDownscaled = xFlat[ind2deg]
+                        yDownscaled = yFlat[ind2deg]
+                        if printToScreen == True:
+                            print('Downscaling to {} degree resolution'.format(self.resolution))
+                            print('{} points rather than {} (full)'.format(len(xDownscaled), len(xFlat)))
+                        reshapeIndX = np.where((np.diff(xDownscaled) > 4) | (np.diff(xDownscaled) < -4))
+                        reshapeIndY = np.where((np.diff(yDownscaled) < 0))
+                        x2 = xDownscaled.reshape(int(len(reshapeIndY[0]) + 1), int(reshapeIndX[0][0] + 1))
+                        y2 = yDownscaled.reshape(int(len(reshapeIndY[0]) + 1), int(reshapeIndX[0][0] + 1))
+                    My, Mx = np.shape(y2)
+
+
+                    # print('Extracted until {}-{}'.format(year2, month2))
+
+                    from global_land_mask import globe
+                    wrapLons = np.where((x2 > 180))
+                    x2[wrapLons] = x2[wrapLons] - 360
+                    xFlat = x2.flatten()
+                    yFlat = y2.flatten()
+
+                    isOnLandGrid = globe.is_land(y2, x2)
+                    isOnLandFlat = globe.is_land(yFlat, xFlat)
+
+                    x2[wrapLons] = x2[wrapLons] + 360
+                    xFlat = x2.flatten()
+
+                    if estelaMat == None:
+                        print('you want to use ESTELA memory but did not provide a path to the data')
+                    else:
+                        from scipy.interpolate import RegularGridInterpolator as RGI
+                        import h5py
+                        with h5py.File(estelaMat, 'r') as f:
+                            Xraw = f['full/Xraw'][:]
+                            Y = f['full/Y'][:]
+                            DJF = f['C/traveldays_interp/DJF'][:]
+                            MAM = f['C/traveldays_interp/MAM'][:]
+                            JJA = f['C/traveldays_interp/JJA'][:]
+                            SON = f['C/traveldays_interp/SON'][:]
+
+                        if self.basin == 'atlantic':
+                            X_estela = np.copy(Xraw)
+                            temp = np.where(Xraw < 40)
+                            X_estela[temp] = X_estela[temp] + 360
+                            X_estela = np.roll(X_estela, 440, axis=1)
+                            Y_estela = np.copy(Y)
+                            Y_estela = np.roll(Y_estela, 440, axis=1)
+                        else:
+                            X_estela = np.copy(Xraw)
+                            temp = np.where(Xraw < 0)
+                            X_estela[temp] = X_estela[temp] + 360
+                            X_estela = np.roll(X_estela, 360, axis=1)
+                            Y_estela = np.copy(Y)
+                            Y_estela = np.roll(Y_estela, 360, axis=1)
+
+                        sind = np.where(np.asarray(datesAvg) == tt)
+                        datesMem = np.asarray(datesAvg)[sind[0][0]:]
+                        monE = datesMem[0].month
+                        if monE <= 2 or monE == 12:
+                            W = DJF  # C['traveldays_interp']['DJF']
+                        elif 3 <= monE <= 5:
+                            W = MAM  # C['traveldays_interp']['MAM']
+                        elif 6 <= monE <= 8:
+                            W = JJA  # C['traveldays_interp']['JJA']
+                        else:
+                            W = SON  # C['traveldays_interp']['SON']
+
+                        if self.basin == 'atlantic':
+                            W2 = np.roll(W, 280, axis=1)
+                        else:
+                            W2 = np.roll(W, 360, axis=1)
+
+                        points = (np.unique(Y_estela.flatten()), np.unique(X_estela.flatten()),)
+                        interpF = RGI(points, W2)
+                        intPoints = (y2, x2)
+                        temp_interp = interpF(intPoints)
+                        if self.avgTime == 0:
+                            tempRounded = ceilPartial(temp_interp, 1 / 24)
+                            multiplier = 24
+                        else:
+                            tempRounded = ceilPartial(temp_interp, self.avgTime / 24)
+                            multiplier = 24 / self.avgTime
+
+                        xvector = x2.flatten()
+                        yvector = y2.flatten()
+                        travelv = tempRounded.flatten()
+
+                        slpMem = np.nan * np.ones((len(slpDownscaled), len(datesMem)))
+                        grdMem = np.nan * np.ones((len(grdDownscaled), len(datesMem)))
+
+                        for ff in range(len(datesMem)):
+                            madeup_slp = np.nan * np.ones((len(travelv),))
+                            madeup_grd = np.nan * np.ones((len(travelv),))
+                            for hh in range(int(25 * multiplier)):
+                                # print('{}'.format(hh/multiplier+1/multiplier))
+                                indexIso = np.where(travelv == (hh / multiplier + 1 / multiplier))
+                                madeup_slp[indexIso] = slpDownscaled[indexIso, ff + sind[0][0] - hh]
+                                madeup_grd[indexIso] = grdDownscaled[indexIso, ff + sind[0][0] - hh]
+
+                            indexIso = np.where(travelv > (hh / multiplier + 1 / multiplier))
+                            madeup_slp[indexIso] = slpDownscaled[indexIso, ff + sind[0][0] - hh]
+                            madeup_grd[indexIso] = grdDownscaled[indexIso, ff + sind[0][0] - hh]
+
+                            slpMem[:, ff] = madeup_slp
+                            grdMem[:, ff] = madeup_grd
+
+                        trimSlps = slpMem[~isOnLandFlat, :]
+                        trimGrds = grdMem[~isOnLandFlat, :]
+
+                        if counter == 0:
+                            SLPS = trimSlps
+                            GRDS = trimGrds
+                            DATES = datesMem
+                        else:
+                            SLPS = np.hstack((SLPS, trimSlps))
+                            GRDS = np.hstack((GRDS, trimGrds))
+                            DATES = np.append(DATES, datesMem)
+
+                        counter = counter + 1
+
+            self.xGridLocal = x2
+            self.yGridLocal = y2
+            self.xFlatLocal = xFlat
+            self.yFlatLocal = yFlat
+            self.isOnLandGridLocal = isOnLandGrid
+            self.isOnLandFlatLocal = isOnLandFlat
+            self.SLPSLocal = SLPS
+            self.GRDSLocal = GRDS
+            self.DATESLocal = DATES
+            self.MxLocal = Mx
+            self.MyLocal = My
+
+            import pickle
+            samplesPickle = 'slpsLocal.pickle'
+            outputSamples = {}
+            outputSamples['x2Local'] = x2
+            outputSamples['y2Local'] = y2
+            outputSamples['xFlatLocal'] = xFlat
+            outputSamples['yFlatLocal'] = yFlat
+            outputSamples['isOnLandGridLocal'] = isOnLandGrid
+            outputSamples['isOnLandFlatLocal'] = isOnLandFlat
+            outputSamples['SLPSLocal'] = SLPS
+            outputSamples['GRDSLocal'] = GRDS
+            outputSamples['DATESLocal'] = DATES
+            outputSamples['MxLocal'] = Mx
+            outputSamples['MyLocal'] = My
+
+            with open(os.path.join(self.savePath,samplesPickle), 'wb') as f:
+                pickle.dump(outputSamples, f)
+
+
     def pcaOfSlps(self,loadPrior=False,loadPickle='./'):
 
         if loadPrior==True:
@@ -783,6 +1409,78 @@ class weatherTypes():
                 pickle.dump(outputSamples, f)
 
 
+
+    def pcaOfSlpsLocal(self,loadPrior=False,loadPickle='./'):
+
+        if loadPrior==True:
+            import pickle
+            with open(loadPickle, "rb") as input_file:
+                pcas = pickle.load(input_file)
+            self.SlpGrdMeanLocal = pcas['SlpGrdMeanLocal']
+            self.SlpGrdStdLocal = pcas['SlpGrdStdLocal']
+            self.SlpGrdNormLocal = pcas['SlpGrdNormLocal']
+            self.SlpGrdLocal = pcas['SlpGrdLocal']
+            self.PCsLocal = pcas['PCsLocal']
+            self.EOFsLocal = pcas['EOFsLocal']
+            self.varianceLocal = pcas['varianceLocal']
+            self.nPercentLocal = pcas['nPercentLocal']
+            self.APEVLocal = pcas['APEVLocal']
+            self.ntermLocal = pcas['ntermLocal']
+            print('loaded prior PCA processing')
+
+
+        else:
+
+            from sklearn.decomposition import PCA
+
+            trimSlps = self.SLPSLocal
+            trimGrds = self.GRDSLocal
+
+            SlpGrd = np.hstack((trimSlps.T, trimGrds.T))
+            SlpGrdMean = np.mean(SlpGrd, axis=0)
+            SlpGrdStd = np.std(SlpGrd, axis=0)
+            SlpGrdNorm = (SlpGrd[:, :] - SlpGrdMean) / SlpGrdStd
+            SlpGrdNorm[np.isnan(SlpGrdNorm)] = 0
+
+            # principal components analysis
+            ipca = PCA(n_components=min(SlpGrdNorm.shape[0], SlpGrdNorm.shape[1]))
+            PCs = ipca.fit_transform(SlpGrdNorm)
+            EOFs = ipca.components_
+            variance = ipca.explained_variance_
+            nPercent = variance / np.sum(variance)
+            APEV = np.cumsum(variance) / np.sum(variance) * 100.0
+            nterm = np.where(APEV <= 0.95 * 100)[0][-1]
+
+            self.SlpGrdMeanLocal = SlpGrdMean
+            self.SlpGrdStdLocal = SlpGrdStd
+            self.SlpGrdNormLocal = SlpGrdNorm
+            self.SlpGrdLocal = SlpGrd
+            self.PCsLocal = PCs
+            self.EOFsLocal = EOFs
+            self.varianceLocal = variance
+            self.nPercentLocal = nPercent
+            self.APEVLocal = APEV
+            self.ntermLocal = nterm
+
+            import pickle
+            samplesPickle = 'pcasLocal.pickle'
+            outputSamples = {}
+            outputSamples['SlpGrdMeanLocal'] = SlpGrdMean
+            outputSamples['SlpGrdStdLocal'] = SlpGrdStd
+            outputSamples['SlpGrdNormLocal'] = SlpGrdNorm
+            outputSamples['SlpGrdLocal'] = SlpGrd
+            outputSamples['PCsLocal'] = PCs
+            outputSamples['EOFsLocal'] = EOFs
+            outputSamples['varianceLocal'] = variance
+            outputSamples['nPercentLocal'] = nPercent
+            outputSamples['APEVLocal'] = APEV
+            outputSamples['ntermLocal'] = nterm
+
+            with open(os.path.join(self.savePath,samplesPickle), 'wb') as f:
+                pickle.dump(outputSamples, f)
+
+
+
     def wtClusters(self,numClusters=49,TCs=True,Basin=b'NA',RG=None,minGroupSize=50,alphaRG=0.1,met=None,loadPrior=False,loadPickle='./'):
 
         if loadPrior == True:
@@ -828,6 +1526,7 @@ class weatherTypes():
                 request.urlretrieve(remote_url, file)
                 import xarray as xr
                 data = xr.open_dataset(file)
+                self.tcData = data
                 tcBasin = data['basin']
                 TCtime = data['time'].values
                 # TClon = data['lon'].values
@@ -847,11 +1546,26 @@ class weatherTypes():
 
                 from functions import dt2cal
                 tcAllTime = [dt2cal(dt) for dt in tcTime.flatten()]
-                tcDailyTime = [np.array([d[0],d[1],d[2]]) for d in tcAllTime]
+                if self.avgTime == 24:
+                    tcDailyTime = [np.array([d[0],d[1],d[2]]) for d in tcAllTime]
+                else:
+                    tcDailyTime = np.vstack(
+                        [np.array([d[0], d[1], d[2], (np.floor_divide(d[3], 12) * 12), 0, 0]) for d in tcAllTime])
+
+                # recentTCs = np.where(tcHalfDayTime[:, 0] > 1940)
+                # allTCtimes = tcHourlyTime[recentTCs[0], :]
+                # allTCLat = tcLat[recentTCs[0]]
+                # allTCLon = tcLon[recentTCs[0]]
+                # allTCPres = tcPres[recentTCs[0]]
+                # allTCHalfDayTime = tcHalfDayTime[recentTCs[0], :]
+                #
+                # # u, idx, counts = np.unique(tcAllTime, axis=0, return_index=True, return_counts=True)
+                # allTCtimes = np.unique(allTCHalfDayTime, axis=0, return_index=False, return_counts=False)
+
                 # u, idx, counts = np.unique(tcAllTime, axis=0, return_index=True, return_counts=True)
                 allTCtimes = np.unique(tcDailyTime, axis=0, return_index=False, return_counts=False)
                 recentTCs = np.where(allTCtimes[:,0] > 1940)
-                allTCtimes = allTCtimes[recentTCs[0],:]
+                allTCtimesVec = allTCtimes[recentTCs[0],:]
 
                 import datetime
                 def dateDay2datetime(d_vec):
@@ -860,6 +1574,13 @@ class weatherTypes():
                     d_vec = [[y1 m1 d1 H1 M1],[y2 ,2 d2 H2 M2],..]
                     '''
                     return [datetime.datetime(d[0], d[1], d[2]) for d in d_vec]
+
+                def dateDayHour2datetime(d_vec):
+                    '''
+                    Returns datetime list from a datevec matrix
+                    d_vec = [[y1 m1 d1 H1 M1],[y2 ,2 d2 H2 M2],..]
+                    '''
+                    return [datetime.datetime(d[0], d[1], d[2], d[3], 0) for d in d_vec]
 
                 def dateDay2datetimeDate(d_vec):
                     '''
@@ -875,13 +1596,13 @@ class weatherTypes():
                     '''
                     return [datetime.date(d.year, d.month, d.day) for d in d_vec]
 
-                allTCtimes = np.asarray(dateDay2datetime(allTCtimes))
-                import pandas as pd
-                df = pd.DataFrame(allTCtimes, columns=['date'])
-                dropDups = df.drop_duplicates('date')
+                allTCtimes = np.asarray(dateDayHour2datetime(allTCtimesVec))
+                # import pandas as pd
+                # df = pd.DataFrame(allTCtimes, columns=['date'])
+                # dropDups = df.drop_duplicates('date')
 
-                tcDates = dropDups['date'].dt.date.tolist()
-                slpDates = datetime2datetimeDate(self.DATES)
+                tcDates = allTCtimes#dropDups['date'].dt.date.tolist()
+                slpDates = self.DATES#datetime2datetimeDate(self.DATES)
                 overlap = [x for x in slpDates if x in tcDates]
 
                 ind_dict = dict((k, i) for i, k in enumerate(slpDates))
@@ -899,6 +1620,7 @@ class weatherTypes():
 
                 print('clustering Extra Tropical Days')
                 self.num_clustersETC = 49
+                self.tcDates = tcDates
                 kma = KMeans(n_clusters=self.num_clustersETC, n_init=2000).fit(pcLess)
                 # groupsize
                 _, group_sizeETC = np.unique(kma.labels_, return_counts=True)
@@ -969,6 +1691,7 @@ class weatherTypes():
                 outputSamples = {}
                 outputSamples['bmus'] = self.bmus
                 outputSamples['Km_ETC'] = self.Km_ETC
+                outputSamples['tcData'] = self.tcData
                 outputSamples['sorted_centroidsETC'] = self.sorted_centroidsETC
                 outputSamples['sorted_cenEOFsETC'] = self.sorted_cenEOFsETC
                 outputSamples['bmus_correctedETC'] = self.bmus_correctedETC

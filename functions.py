@@ -94,6 +94,42 @@ def loadWIS(file):
 
 
 
+def consecutive_runs(a):
+    import numpy as np
+    """
+    Identify runs of values that increase by exactly +1
+    between neighbouring elements.
+
+    Parameters
+    ----------
+    a : array‑like of int
+        1‑D NumPy array (or anything convertible) in which to
+        find consecutive sequences. Order is preserved.
+
+    Returns
+    -------
+    runs : list[ndarray]
+        A list of 1‑D views, each containing one run.
+    idx  : list[tuple[int, int]]
+        Parallel list of (start, stop) index pairs (Python slice style).
+    """
+    a = np.asarray(a)
+    if a.ndim != 1:
+        raise ValueError("Input must be 1‑D")
+
+    # Boolean where difference == 1
+    step = np.diff(a) == 1            # length N−1
+    # Start of a new run: where step is False OR at position 0
+    run_starts = np.insert(~step, 0, True)
+    start_idx = np.flatnonzero(run_starts)
+    # End is just before the next start (or len(a))
+    end_idx = np.r_[start_idx[1:], len(a)]
+
+    runs = [a[s:e] for s, e in zip(start_idx, end_idx)]
+    idx  = [(int(s), int(e)) for s, e in zip(start_idx, end_idx)]
+    return runs, idx
+
+
 def datenum_to_datetime(datenum):
     """
     Convert Matlab datenum into Python datetime.
