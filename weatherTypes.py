@@ -21,6 +21,7 @@ class weatherTypes():
         self.resolutionLocal = kwargs.get('resolutionLocal',0.5)
 
         self.avgTime = kwargs.get('avgTime',24)
+        self.avgTimeLocal = kwargs.get('avgTimeLocal',3)
         self.startTime = kwargs.get('startTime',[1979,1,1])
         self.endTime = kwargs.get('endTime',[2024,5,31])
         self.slpMemory = kwargs.get('slpMemory',False)
@@ -771,17 +772,17 @@ class weatherTypes():
 
     def extractCFSRLocal(self,centralNode,printToScreen=False,estelaMat=None,loadPrior=False,loadPickle='./'):
         '''
-        This function is utilized for opening *.raw Argus files prior to a debayering task,
-        and adds the
-
-        Must call this function before calling any debayering functions
+        This function is
         '''
+
 
         if loadPrior==True:
             import pickle
             with open(loadPickle, "rb") as input_file:
                 slps = pickle.load(input_file)
             self.DATESLocal = slps['DATESLocal']
+            self.avgTimeLocal = slps['avgTimeLocal']
+            self.resolutionLocal = slps['resolutionLocal']
             self.xGridLocal = slps['x2Local']
             self.yGridLocal = slps['y2Local']
             self.xFlatLocal = slps['xFlatLocal']
@@ -834,18 +835,25 @@ class weatherTypes():
             # if centralNode[1] < 0:
             #     centralNode[1]=centralNode[1]+360
 
+            # if centralNode is not None:
             print(centralNode[0], centralNode[1])
-            print(floorPartial(centralNode[1],1), ceilPartial(centralNode[1],1), ceilPartial(centralNode[0],1), floorPartial(centralNode[0],1))
+            print(floorPartial(centralNode[1],1)-4, ceilPartial(centralNode[1],1)+4, ceilPartial(centralNode[0],1)+4, floorPartial(centralNode[0],1)-4)
 
-            lon_left = floorPartial(centralNode[1],1) - 2
-            lon_right = ceilPartial(centralNode[1],1) + 2
+            lon_left = floorPartial(centralNode[1],1) - 4
+            lon_right = ceilPartial(centralNode[1],1) + 4
 
-            pos_lon1 = np.where((lon == floorPartial(centralNode[1],1) - 2))
-            pos_lon2 = np.where((lon == ceilPartial(centralNode[1],1) + 2))
+            pos_lon1 = np.where((lon == floorPartial(centralNode[1],1) - 4))
+            pos_lon2 = np.where((lon == ceilPartial(centralNode[1],1) + 4))
 
-            pos_lat2 = np.where((lat == ceilPartial(centralNode[0],1) + 2))
-            pos_lat1 = np.where((lat == floorPartial(centralNode[0],1) - 2))
+            pos_lat2 = np.where((lat == ceilPartial(centralNode[0],1) + 4))
+            pos_lat1 = np.where((lat == floorPartial(centralNode[0],1) - 4))
             print(pos_lon1, pos_lon2, pos_lat1, pos_lat2)
+
+            # else:
+            #     pos_lon1 = np.where((lon == self.lonLeft - 4))
+            #     pos_lon2 = np.where((lon == self.lonRight + 4))
+            #     pos_lat2 = np.where((lat == self.latTop + 4))
+            #     pos_lat1 = np.where((lat == self.latBot - 4))
 
             latitud = lat[(pos_lat2[0][0]):(pos_lat1[0][0] + 1)]
             if lon_left > lon_right:
@@ -935,7 +943,7 @@ class weatherTypes():
                         grd_[:, mmm] = np.sqrt(vgrad[0] ** 2 + vgrad[1] ** 2).flatten()
                     # slp_ = slp.reshape(n*m,p)
 
-                    if self.avgTime == 0:
+                    if self.avgTimeLocal == 0:
                         if printToScreen == True:
                             print('returning hourly values')
                         elif counter == 0:
@@ -945,11 +953,11 @@ class weatherTypes():
                         grdAvg = grd_
                         datesAvg = dates
                     else:
-                        numWindows = int(len(time) / self.avgTime)
+                        numWindows = int(len(time) / self.avgTimeLocal)
                         if printToScreen == True:
-                            print('averaging every {} hours to {} timesteps'.format(self.avgTime, numWindows))
+                            print('averaging every {} hours to {} timesteps'.format(self.avgTimeLocal, numWindows))
                         elif counter == 0:
-                            print('averaging every {} hours to {} timesteps'.format(self.avgTime, numWindows))
+                            print('averaging every {} hours to {} timesteps'.format(self.avgTimeLocal, numWindows))
 
                         c = 0
                         datesAvg = list()
@@ -957,10 +965,10 @@ class weatherTypes():
                         grdAvg = np.empty((n * p, numWindows))
 
                         for t in range(numWindows):
-                            slpAvg[:, t] = np.nanmean(slp_[:, c:c + self.avgTime], axis=1)
-                            grdAvg[:, t] = np.nanmean(grd_[:, c:c + self.avgTime], axis=1)
+                            slpAvg[:, t] = np.nanmean(slp_[:, c:c + self.avgTimeLocal], axis=1)
+                            grdAvg[:, t] = np.nanmean(grd_[:, c:c + self.avgTimeLocal], axis=1)
                             datesAvg.append(dates[c])
-                            c = c + self.avgTime
+                            c = c + self.avgTimeLocal
 
                     # are we reducing the resolution of the grid?
                     if self.resolutionLocal == 0.5:
@@ -1002,10 +1010,10 @@ class weatherTypes():
                         xDownscaled = xFlat[ind2deg]
                         yDownscaled = yFlat[ind2deg]
                         if printToScreen == True:
-                            print('Downscaling to {} degree resolution'.format(self.resolution))
+                            print('Downscaling to {} degree resolution'.format(self.resolutionLocal))
                             print('{} points rather than {} (full)'.format(len(xDownscaled), len(xFlat)))
                         elif counter == 0:
-                            print('Downscaling to {} degree resolution'.format(self.resolution))
+                            print('Downscaling to {} degree resolution'.format(self.resolutionLocal))
                             print('{} points rather than {} (full)'.format(len(xDownscaled), len(xFlat)))
                         reshapeIndX = np.where((np.diff(xDownscaled) > 4) | (np.diff(xDownscaled) < -4))
                         reshapeIndY = np.where((np.diff(yDownscaled) < 0))
@@ -1139,25 +1147,25 @@ class weatherTypes():
                         grd_[:, mmm] = np.sqrt(vgrad[0] ** 2 + vgrad[1] ** 2).flatten()
                     # slp_ = slp.reshape(n*m,p)
 
-                    if self.avgTime == 0:
+                    if self.avgTimeLocal == 0:
                         if printToScreen == True:
                             print('returning hourly values')
                         slpAvg = slp_
                         grdAvg = grd_
                         datesAvg = datesCombined
                     else:
-                        numWindows = int(len(datesCombined) / self.avgTime)
+                        numWindows = int(len(datesCombined) / self.avgTimeLocal)
                         if printToScreen == True:
-                            print('averaging every {} hours to {} timesteps'.format(self.avgTime, numWindows))
+                            print('averaging every {} hours to {} timesteps'.format(self.avgTimeLocal, numWindows))
                         c = 0
                         datesAvg = list()
                         slpAvg = np.empty((n * p, numWindows))
                         grdAvg = np.empty((n * p, numWindows))
                         for t in range(numWindows):
-                            slpAvg[:, t] = np.nanmean(slp_[:, c:c + self.avgTime], axis=1)
-                            grdAvg[:, t] = np.nanmean(grd_[:, c:c + self.avgTime], axis=1)
+                            slpAvg[:, t] = np.nanmean(slp_[:, c:c + self.avgTimeLocal], axis=1)
+                            grdAvg[:, t] = np.nanmean(grd_[:, c:c + self.avgTimeLocal], axis=1)
                             datesAvg.append(datesCombined[c])
-                            c = c + self.avgTime
+                            c = c + self.avgTimeLocal
 
                     # are we reducing the resolution of the grid?
                     if self.resolutionLocal == 0.5:
@@ -1192,7 +1200,7 @@ class weatherTypes():
                         xDownscaled = xFlat[ind2deg]
                         yDownscaled = yFlat[ind2deg]
                         if printToScreen == True:
-                            print('Downscaling to {} degree resolution'.format(self.resolution))
+                            print('Downscaling to {} degree resolution'.format(self.resolutionLocal))
                             print('{} points rather than {} (full)'.format(len(xDownscaled), len(xFlat)))
                         reshapeIndX = np.where((np.diff(xDownscaled) > 4) | (np.diff(xDownscaled) < -4))
                         reshapeIndY = np.where((np.diff(yDownscaled) < 0))
@@ -1320,6 +1328,7 @@ class weatherTypes():
             self.MxLocal = Mx
             self.MyLocal = My
 
+
             import pickle
             samplesPickle = 'slpsLocal.pickle'
             outputSamples = {}
@@ -1334,6 +1343,9 @@ class weatherTypes():
             outputSamples['DATESLocal'] = DATES
             outputSamples['MxLocal'] = Mx
             outputSamples['MyLocal'] = My
+            outputSamples['avgTimeLocal'] = self.avgTimeLocal
+            outputSamples['resolutionLocal'] = self.resolutionLocal
+
 
             with open(os.path.join(self.savePath,samplesPickle), 'wb') as f:
                 pickle.dump(outputSamples, f)
@@ -1499,8 +1511,8 @@ class weatherTypes():
             self.groupSizeETC = dwts['groupSizeETC']
             self.numClustersETC = dwts['numClustersETC']
             self.bmus_corrected = dwts['bmus_corrected']
-            self.windowHs = dwts['windowHs']
-            self.windowTp = dwts['windowTp']
+            #self.windowHs = dwts['windowHs']
+            #self.windowTp = dwts['windowTp']
             self.numClusters = np.nanmax(dwts['numClustersETC'])
 
             print('loaded prior DWT processing')
@@ -1565,6 +1577,8 @@ class weatherTypes():
                 # u, idx, counts = np.unique(tcAllTime, axis=0, return_index=True, return_counts=True)
                 allTCtimes = np.unique(tcDailyTime, axis=0, return_index=False, return_counts=False)
                 recentTCs = np.where(allTCtimes[:,0] > 1940)
+                print(recentTCs[0])
+                print(allTCtimes[recentTCs[0],:])
                 allTCtimesVec = allTCtimes[recentTCs[0],:]
 
                 import datetime
@@ -1596,7 +1610,13 @@ class weatherTypes():
                     '''
                     return [datetime.date(d.year, d.month, d.day) for d in d_vec]
 
-                allTCtimes = np.asarray(dateDayHour2datetime(allTCtimesVec))
+                if self.avgTime < 24:
+                    allTCtimes = np.asarray(dateDayHour2datetime(allTCtimesVec))
+                else:
+                    allTCtimes = np.asarray(dateDay2datetime(allTCtimesVec))
+
+
+
                 # import pandas as pd
                 # df = pd.DataFrame(allTCtimes, columns=['date'])
                 # dropDups = df.drop_duplicates('date')
@@ -2719,7 +2739,11 @@ class weatherTypes():
             from dateutil.relativedelta import relativedelta
             from datetime import datetime
             st = time[0]
-            end = datetime(self.endTime[0], self.endTime[1] + 1, 1)
+            if self.endTime[1] == 12:
+                end = datetime(self.endTime[0]+1,1,1)
+            else:
+                end = datetime(self.endTime[0], self.endTime[1] + 1, 1)
+
             step = relativedelta(hours=1)
             hourTime = []
             while st < end:
@@ -2938,7 +2962,10 @@ class weatherTypes():
             from dateutil.relativedelta import relativedelta
             from datetime import datetime
             st = time[0]
-            end = datetime(self.endTime[0], self.endTime[1] + 1, 1)
+            if self.endTime[1] == 12:
+                end = datetime(self.endTime[0]+1, 1, 1)
+            else:
+                end = datetime(self.endTime[0], self.endTime[1] + 1, 1)
             step = relativedelta(hours=1)
             hourTime = []
             while st < end:
