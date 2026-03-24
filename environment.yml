@@ -1,0 +1,22 @@
+name: gencade-climate
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - numpy
+  - pandas
+  - xarray
+  - netcdf4
+  - h5py
+  - scipy
+  - matplotlib
+  - scikit-learn
+  - statsmodels
+  - cftime
+  - tqdm
+  - cdsapi
+  - basemap
+  - pip
+  - pip:
+      - global-land-mask
